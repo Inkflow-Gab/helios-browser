@@ -62,6 +62,7 @@ import com.helios.browser.ui.components.AddressBar
 import com.helios.browser.ui.components.BookmarksSheet
 import com.helios.browser.ui.components.BrowserMenuSheet
 import com.helios.browser.ui.components.CrashBanner
+import com.helios.browser.ui.components.CreditsSheet
 import com.helios.browser.ui.components.HistorySheet
 import com.helios.browser.ui.components.ShieldsSheet
 import com.helios.browser.ui.components.StartPageView
