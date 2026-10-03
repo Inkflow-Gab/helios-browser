@@ -101,20 +101,29 @@ dependencies {
     // GeckoView: Firefox's engine, published by Mozilla and not by Google.
     //
     // Why it is here and not an extension host we wrote: `android.webkit.WebView` has no extension
-    // API at all, so no amount of code in this app can load one. Gecko is Firefox, so the whole
-    // WebExtensions system comes with it -- uBlock Origin, Bitwarden, Dark Reader, containers.
+    // API at all, so no amount of code in this app can load one. Gecko *is* Firefox, so the whole
+    // WebExtensions system arrives with it -- uBlock Origin, Bitwarden, Dark Reader, containers.
+    // That is the entire reason for this dependency and the whole point of the migration.
     //
-    // What it costs, stated plainly rather than discovered later:
-    //   - The AAR is ~231 MB because it ships every ABI in one file. Split per-ABI it lands nearer
-    //     100-140 MB, against roughly 11 MB today.
-    //   - The engine/ layer is replaced. Nothing in ui/, domain/, data/ or di/ changes.
-    //   - adblock-rust retires. Gecko ships tracking protection and uBlock works, which is strictly
-    //     better than the list of hosts this app compiled in.
+    // Why the per-ABI artifacts rather than `geckoview`:
+    //   The single omni artifact is 262 MB because it carries every ABI in one file. Declared per
+    //   ABI it is 73 + 70 + 77 MB. It makes no difference to a fat universal APK and an enormous
+    //   difference once ABI splits or an App Bundle ships one ABI to a device.
     //
-    // Declared but not yet consumed: engine/GeckoSessionHost.kt is the first slice. Nothing calls
-    // into Gecko until that exists, so if this dependency turns out to be unworkable the deletion is
-    // one line rather than an unwind.
-    implementation("org.mozilla.geckoview:geckoview:157.0.20260924084938")
+    // Why version 128 and not the latest 157:
+    //   157 requires compileSdk 37. This module compiles against 34, and the AGP in use tops out at
+    //   34, so taking the newest engine means migrating AGP, Gradle, Kotlin, the Compose compiler
+    //   plugin and KSP together. Version 128 needs nothing moved: it asks for kotlin-stdlib 1.9.24,
+    //   which our Kotlin 2.0.0 already satisfies, and its transitive versions are all at or below
+    //   ours. So the engine lands first and the toolchain moves second, with a working browser
+    //   between the two steps rather than after both.
+    //
+    // Declared but not yet consumed: nothing calls into Gecko until engine/GeckoSessionHost.kt
+    // exists, so if this proves unworkable the removal is three lines, not an unwind.
+    val geckoVersion = "128.0.20240704121409"
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:$geckoVersion")
+    implementation("org.mozilla.geckoview:geckoview-armeabi-v7a:$geckoVersion")
+    implementation("org.mozilla.geckoview:geckoview-x86_64:$geckoVersion")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
