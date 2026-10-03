@@ -3,6 +3,7 @@ package com.helios.browser.diagnostics
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.helios.browser.BuildConfig
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -42,7 +43,7 @@ object CrashReporter {
     private val recording = ThreadLocal.withInitial { false }
 
     @Volatile
-    private var installed: UncaughtExceptionHandler? = null
+    private var installed: Thread.UncaughtExceptionHandler? = null
 
     /**
      * Installs the handler. Safe to call more than once; only the first call takes effect.
