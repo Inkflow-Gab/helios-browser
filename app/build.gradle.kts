@@ -69,18 +69,14 @@ android {
 
     // One APK per ABI.
     //
-    // This exists because of GeckoView. libxul.so is ~59 MB on its own for a single 32-bit ABI,
-    // and the engine ships it for every ABI we build, so a universal APK carries three copies.
-    // That is roughly 230 MB of native library to install on a phone, which is not acceptable.
+    // Was needed only while GeckoView was a candidate: libxul.so is ~59 MB per 32-bit ABI and the
+    // engine shipped it for all three, which pushed the debug APK from 11 MB to a measured 282 MB.
+    // GeckoView was removed rather than shipped -- it worked, but a browser that cannot do anything
+    // a WebView browser cannot do, at 25 times the size, is not a trade worth making.
     //
-    // Splits is the correct tool: it builds once and emits one APK per ABI, so a device downloads
-    // the one that matches it and nothing else. It is declared but not enabled, so `assembleDebug`
-    // still produces a single universal APK that installs anywhere -- which is what makes the
-    // side-loaded debug build usable and what keeps CI's three-ABI check meaningful.
-    //
-    // Enabling it means the release artifact stops being one file, so the upload step in the
-    // workflow has to publish all of them rather than the first. That is left until the engine is
-    // actually in use, at which point there is something to install worth measuring.
+    // The block stays, disabled, because it costs nothing and is the right answer the moment a
+    // native dependency of that weight is genuinely needed. With only the adblock engine's small
+    // .so files, a universal APK is a few hundred KB over the sum of its ABIs.
     splits {
         abi {
             isEnable = false
@@ -121,40 +117,25 @@ dependencies {
     // AndroidX WebKit: hardware-accelerated Chromium WebView, Safe Browsing
     implementation("androidx.webkit:webkit:1.11.0")
 
-    // GeckoView: Firefox's engine, published by Mozilla and not by Google.
+    // GeckoView was evaluated here and removed. The record is kept because the conclusion is
+    // non-obvious and will otherwise be re-litigated:
     //
-    // Why it is here and not an extension host we wrote: `android.webkit.WebView` has no extension
-    // API at all, so no amount of code in this app can load one. Gecko *is* Firefox, so the whole
-    // WebExtensions system arrives with it -- uBlock Origin, Bitwarden, Dark Reader, containers.
-    // That is the entire reason for this dependency and the whole point of the migration.
+    //   `android.webkit.WebView` has no extension API, so real browser extensions are impossible
+    //   without a different engine. GeckoView (Firefox) is the only way to get them as an Android
+    //   library rather than a source fork, and it does work -- it resolved, compiled and passed the
+    //   full test suite at version 128 without moving the toolchain.
     //
-    // Why the omni artifact rather than the per-ABI ones:
-    //   Mozilla also publishes geckoview-arm64-v8a (73 MB), -armeabi-v7a (70 MB) and -x86_64
-    //   (77 MB), which look attractive. They cannot be declared together: each declares the same
-    //   Gradle capability `org.mozilla.geckoview:geckoview:<version>`, so Gradle rejects all three
-    //   at once as conflicting providers and the build fails to resolve. They are alternatives for
-    //   a project targeting exactly one ABI, and this project targets three, because the adblock
-    //   engine is cross-compiled for all three and CI fails the APK if any ABI is missing.
+    //   It was removed anyway. The debug APK went from about 11 MB to a measured 282 MB, because
+    //   libxul.so is roughly 59 MB per 32-bit ABI and ships for all three. Nothing called into it,
+    //   so what that bought was an app that could do exactly what it did before, 25 times larger,
+    //   while still having no extensions. Migrating the engine would have taken that further --
+    //   2,349 lines of engine/ rewritten -- and the payoff for this app is a password manager and
+    //   Dark Reader, since ad blocking is already done with adblock-rust at no size cost.
     //
-    // How the size is actually controlled, then:
-    //   The omni AAR is 262 MB on disk because it carries libxul.so for every ABI. A universal APK
-    //   is therefore large, and there is no way around that while one APK serves three ABIs. The
-    //   fix is the `splits` block below, which is what splits are for: one small APK per ABI, with
-    //   libxul.so for just the device's own architecture. That is ~73-77 MB installed rather than
-    //   ~262 MB, and it is a packaging decision rather than an engine one.
-    //
-    // Why version 128 and not the latest 157:
-    //   157 requires compileSdk 37. This module compiles against 34 and the AGP in use tops out at
-    //   34, so taking the newest engine means migrating AGP, Gradle, Kotlin, the Compose compiler
-    //   plugin and KSP together -- five version-locked pieces at once. Version 128 needs nothing
-    //   moved: it asks for kotlin-stdlib 1.9.24, which our Kotlin 2.0.0 already satisfies, and its
-    //   transitive versions are all at or below ours (core 1.13.1 is exactly what we declare,
-    //   lifecycle 2.7.0 is below our 2.8.3). So the engine lands first and the toolchain moves
-    //   second, with a working browser in between rather than after both.
-    //
-    // Declared but not yet consumed: nothing calls into Gecko until engine/GeckoSessionHost.kt
-    // exists, so if this proves unworkable the removal is one line, not an unwind.
-    implementation("org.mozilla.geckoview:geckoview:128.0.20240704121409")
+    //   If extensions are ever wanted, the work is: add the dependency back, replace the engine/
+    //   layer with GeckoSession equivalents, and accept the APK size or move to an App Bundle.
+    //   Per-ABI GeckoView artifacts exist but cannot be combined -- they all declare the same
+    //   Gradle capability -- so a three-ABI project has to use the omni artifact and split the APK.
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
