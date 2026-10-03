@@ -20,6 +20,7 @@ sealed interface BrowserOverlay {
     data object Bookmarks : BrowserOverlay
     data object History : BrowserOverlay
     data object Downloads : BrowserOverlay
+    data object Credits : BrowserOverlay
 }
 
 /** A finished download, shown in the downloads sheet and the shields stats. */

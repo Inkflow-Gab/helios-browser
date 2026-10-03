@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.helios.browser.BuildConfig
 import com.helios.browser.domain.model.AppSettings
 import com.helios.browser.domain.model.BrowserTab
 import com.helios.browser.domain.model.SearchEngine
@@ -218,6 +219,19 @@ fun BrowserMenuSheet(
                     value = if (page?.isDesktopMode == true) "This tab only" else "Off"
                 ) {
                     onIntent(BrowserIntent.SetDesktopModeForTab(!(page?.isDesktopMode ?: false)))
+                }
+            }
+
+            // --- Credits ----------------------------------------------------------------------
+            // Sits between the settings and the recommendations: it is a licence obligation, not
+            // advice, but it is not something anyone needs while browsing, so it goes last.
+            item(span = { GridItemSpanMax() }) {
+                SettingsRow(
+                    icon = HeliosGlyphs.Info,
+                    title = "Credits and licences",
+                    value = BuildConfig.VERSION_NAME
+                ) {
+                    onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Credits))
                 }
             }
 

@@ -86,7 +86,8 @@ class CookieJarTest {
         val result = CookieJar.parse(
             """
             # Netscape HTTP Cookie File
-            ! this is a note
+            # https://curl.se/docs/http-cookies.html
+            # This is a generated file!  Do not edit.
 
             x.test	FALSE	/	FALSE	0	s	a=b
             """.trimIndent()

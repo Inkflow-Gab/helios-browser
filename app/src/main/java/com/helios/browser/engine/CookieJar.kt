@@ -199,6 +199,14 @@ object CookieJar {
         val domain = fields[0]
         if (!looksLikeHost(domain)) return null
 
+        // A leading dot in the Netscape domain column *means* "also applies to subdomains", so it
+        // is not decoration to keep: it is folded into the flag and stripped from the host. Keeping
+        // it would make `domain` disagree with `domainForHeader`, which does strip it, and the two
+        // are compared when deciding whether a jar may be applied to the current page.
+        val includeSubdomains =
+            fields[1].equals("TRUE", ignoreCase = true) || domain.trim().startsWith(".")
+        val host = domain.trim().removePrefix(".")
+
         val name: String
         val value: String
         if (fields.size >= FIELDS_MODERN) {
@@ -220,8 +228,8 @@ object CookieJar {
         if (value.any { it == ';' || it == '\n' || it == '\r' }) return null
 
         return CookieEntry(
-            domain = domain,
-            includeSubdomains = fields[1].equals("TRUE", ignoreCase = true),
+            domain = host,
+            includeSubdomains = includeSubdomains,
             path = fields[2].ifBlank { "/" },
             secure = fields[3].equals("TRUE", ignoreCase = true),
             httpOnly = httpOnly,

@@ -417,6 +417,16 @@ fun BrowserScreen(
                 )
             }
 
+            BrowserOverlay.Credits -> CreditsSheet(
+                // Dismiss first, then navigate: leaving the sheet up behind a loading page looks
+                // like the sheet is part of the destination.
+                onOpenUrl = {
+                    viewModel.onIntent(BrowserIntent.DismissOverlay)
+                    viewModel.onIntent(BrowserIntent.Navigate(it))
+                },
+                onDismiss = { viewModel.onIntent(BrowserIntent.DismissOverlay) }
+            )
+
             BrowserOverlay.Downloads -> Unit // Downloads are surfaced through snackbars for now.
         }
     }
