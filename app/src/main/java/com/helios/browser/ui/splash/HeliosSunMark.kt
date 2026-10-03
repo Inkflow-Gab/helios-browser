@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -54,10 +56,21 @@ import kotlin.math.sqrt
  * GPU is exactly the allocation that causes stutter, and it would also break on any background that
  * is not solid black.
  *
- * ## Why it animates smoothly
- * Rotation is applied with [Modifier.graphicsLayer], so it is a compositor transform and the draw
- * lambda below never re-runs because of it. The geometry is built once by [drawWithCache] and the
- * paths are cached, so a frame costs one matrix and a handful of flat fills.
+ * ## Why the horizon does not rotate
+ * This was the bug that made the mark look wrong. The whole Canvas carried a `graphicsLayer`
+ * rotation, which turned the **chord** along with the rays. A sun sitting on a horizon whose
+ * horizon tilts upside down is not a sun on a horizon — at a quarter turn it is standing on its
+ * side. The chord is the entire idea, so it has to stay flat.
+ *
+ * The rotation is now a `DrawScope.rotate` around the spikes only, inside the same Canvas. That is
+ * a plain canvas transform rather than a layer, so it costs less than the `graphicsLayer` it
+ * replaces, and the body, halo and horizon stay exactly where they were put.
+ *
+ * ## Why the spikes are clipped
+ * The rays sweep the full circle, so most of them spend most of the time below the horizon, where a
+ * sun on a horizon has no business showing any. `clipRect` to the region above the chord removes
+ * them. It is a rectangle clip against a horizontal line, which is free — no `saveLayer`, no
+ * offscreen buffer, no blend mode — and it stays correct on any background.
  *
  * ## Pass an angle, do not start a clock
  * [spinDegrees] defaults to null, which starts an animation clock — but callers should almost always
@@ -76,23 +89,34 @@ fun HeliosSunMark(
     animate: Boolean = true
 ) {
     val spin = spinDegrees ?: if (animate) rememberSteadySpin() else 0f
-    val geometry = remember(spikeColor) { SunGeometry.build() }
+    // Keyed on nothing: the geometry is built entirely from compile-time constants, so there is no
+    // input that could invalidate it. Keying it on a colour implied one existed.
+    val geometry = remember { SunGeometry.build() }
 
-    Canvas(
-        modifier = modifier.graphicsLayer {
-            // A compositor transform. Reading `spin` here is what invalidates this block per frame,
-            // and nothing below it — the draw lambda closes over `geometry`, which never changes.
-            rotationZ = spin
-        }
-    ) {
+    Canvas(modifier = modifier) {
         val side = minOf(size.width, size.height)
         val factor = side / DESIGN_SIZE
         val origin = Offset(size.width / 2f, size.height / 2f)
 
         translate(origin.x - DESIGN_CENTRE * factor, origin.y - DESIGN_CENTRE * factor) {
             scale(factor, factor, pivot = Offset(DESIGN_CENTRE, DESIGN_CENTRE)) {
+                // Static. Drawn first and never rotated, which is the point.
                 drawHalo(haloColor)
-                geometry.spikes.forEach { drawPath(it, spikeColor) }
+
+                // The rays turn. Clipped to above the horizon so none of them ever show below it.
+                // The clip is in design units because it is inside the scale above.
+                clipRect(
+                    left = 0f,
+                    top = 0f,
+                    right = DESIGN_SIZE,
+                    bottom = horizonY()
+                ) {
+                    rotate(degrees = spin, pivot = Offset(DESIGN_CENTRE, DESIGN_CENTRE)) {
+                        geometry.spikes.forEach { drawPath(it, spikeColor) }
+                    }
+                }
+
+                // On top of the rays, so a ray emerging from behind the disc is hidden by it.
                 drawSunBody(geometry, coreColor)
                 drawCoreHighlight(highlightColor)
             }
@@ -114,10 +138,10 @@ private class SunGeometry(
 ) {
     companion object {
         fun build(): SunGeometry {
-            val chord = CHORD_FRACTION * SUN_RADIUS
             // Half the chord's width: the circle reaches |x| = R*sqrt(1 - k^2) at that height.
             val halfSpan = SUN_RADIUS * sqrt(1f - CHORD_FRACTION * CHORD_FRACTION)
-            val chordY = DESIGN_CENTRE + chord
+            // The same function the ray clip uses, so the two edges cannot drift apart.
+            val chordY = horizonY()
 
             val left = Offset(DESIGN_CENTRE - halfSpan, chordY)
             val right = Offset(DESIGN_CENTRE + halfSpan, chordY)
@@ -147,12 +171,15 @@ private class SunGeometry(
             }
 
             val spikes = buildList {
-                // Eight spikes across the upper half only, so they read as rays coming off a sun
-                // rather than as a closed ring. The step is a named constant rather than a local
-                // `val step`, because a local named `step` shadows the `step` infix function used
-                // on the line below and the loop does not compile.
-                var degree = -180f
-                while (degree <= 180f) {
+                // Twelve rays on a 30 degree step: the full circle, because they rotate. The clip
+                // above the horizon is what limits how many are ever visible, so the count is about
+                // symmetry around twelve o'clock rather than about how many show at once.
+                //
+                // Six of them are above the horizon at any moment. The step is a named constant
+                // rather than a local `val step`, because a local named `step` shadows the `step`
+                // infix function used on the loop below and the code does not compile.
+                var degree = 0f
+                while (degree < 360f) {
                     val radians = Math.toRadians(degree.toDouble())
                     val cosR = cos(radians).toFloat()
                     val sinR = sin(radians).toFloat()
@@ -298,8 +325,20 @@ private const val SPIKE_INNER_RADIUS = SUN_RADIUS * 0.94f
 private const val SPIKE_OUTER_RADIUS = SUN_RADIUS * 1.52f
 private const val SPIKE_HALF_WIDTH = 2.6f
 
-/** Angular gap between corona spikes. 45 degrees gives nine spokes across the upper half. */
-private const val SPIKE_STEP_DEGREES = 45f
+/**
+ * Angular gap between rays. 30 degrees gives twelve of them, so the ones crossing twelve o'clock
+ * are always a mirror pair and the mark never looks lopsided as it turns.
+ */
+private const val SPIKE_STEP_DEGREES = 30f
+
+/**
+ * Where the horizon sits, in design units.
+ *
+ * Shared by the chord the body's path is cut at and by the clip that keeps the rays above it, so
+ * the two cannot drift apart. If they did, the rays would be cut at a different height than the
+ * sun, and the horizon would appear twice.
+ */
+private fun horizonY(): Float = DESIGN_CENTRE + CHORD_FRACTION * SUN_RADIUS
 
 /** The highlight disc inside the sun: offset up and left, so the disc has a light source. */
 private const val HIGHLIGHT_RADIUS = SUN_RADIUS * 0.46f

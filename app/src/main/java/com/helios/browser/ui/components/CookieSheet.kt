@@ -84,6 +84,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun CookieSheet(
     tab: BrowserTab?,
+    onReload: () -> Unit,
+    onApplied: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -225,6 +227,25 @@ fun CookieSheet(
                                 scope.launch {
                                     busy = false
                                     report = result.toReport()
+                                    // Reload, so the cookies are actually sent rather than merely
+                                    // written. This is the whole point of the tool: a cookie sitting
+                                    // in the store changes nothing until a request carries it, and
+                                    // the page in front of the user has already made its requests.
+                                    // Without this the sheet says "reload the page" and the user
+                                    // reads that as the tool not having worked.
+                                    if (result.applied == 0) return@launch
+                                    if (result.rejectedLines.isEmpty()) {
+                                        // All good: get out of the way and show the site.
+                                        onApplied(
+                                            "Applied ${result.applied} " +
+                                                "${if (result.applied == 1) "cookie" else "cookies"} " +
+                                                "to ${page.displayHost}"
+                                        )
+                                    } else {
+                                        // Some lines failed. Reload, but stay open: the rejected
+                                        // lines are the part the user needs to read and fix.
+                                        onReload()
+                                    }
                                 }
                             }
                         }
@@ -287,12 +308,9 @@ fun CookieSheet(
                                 report = if (ok) {
                                     cookieName = ""
                                     cookieValue = ""
-                                    Report(
-                                        title = "Added ${entry.name}",
-                                        detail = "Set on $host. It will not survive a browser " +
-                                            "restart unless the site gives it an expiry.",
-                                        tone = Tone.GOOD
-                                    )
+                                    // Straight to the site. There is nothing to read here, so
+                                    // holding the sheet open would only be in the way.
+                                    onApplied("Added ${entry.name} to $host")
                                 } else {
                                     Report(
                                         title = "Could not set that cookie",

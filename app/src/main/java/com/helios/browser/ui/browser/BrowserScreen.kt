@@ -431,6 +431,15 @@ fun BrowserScreen(
 
             BrowserOverlay.Cookies -> CookieSheet(
                 tab = currentTab,
+                onReload = { viewModel.onIntent(BrowserIntent.Reload) },
+                // Close the sheet, reload, then report. The order matters: dismissing last would
+                // leave a sheet floating over a page that is already loading, which reads as the
+                // sheet being part of the destination.
+                onApplied = { message ->
+                    viewModel.onIntent(BrowserIntent.DismissOverlay)
+                    viewModel.onIntent(BrowserIntent.Reload)
+                    viewModel.onIntent(BrowserIntent.ShowMessage(message))
+                },
                 onDismiss = { viewModel.onIntent(BrowserIntent.DismissOverlay) }
             )
 
