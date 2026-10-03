@@ -80,12 +80,22 @@ class BlockingEngineStateTest {
     /**
      * Guard against the two types drifting apart: adding a field to one and not the other must fail
      * here, not silently in production.
+     *
+     * Synthetic fields are excluded because `@Immutable` makes the Compose compiler add a `$stable`
+     * field to the UI type that the engine type has no reason to have. Comparing raw reflection
+     * output would report a difference that does not exist.
      */
     @Test
     fun `the two types have the same fields`() {
-        val uiFields = BlockingEngineState::class.java.declaredFields.map { it.name }.toSet()
-        val snapshotFields = BlockingEngineSnapshot::class.java.declaredFields.map { it.name }.toSet()
-        assertEquals(uiFields, snapshotFields)
+        fun declared(type: Class<*>) = type.declaredFields
+            .filterNot { it.isSynthetic }
+            .map { it.name }
+            .toSet()
+
+        assertEquals(
+            declared(BlockingEngineSnapshot::class.java),
+            declared(BlockingEngineState::class.java)
+        )
     }
 
     @Test

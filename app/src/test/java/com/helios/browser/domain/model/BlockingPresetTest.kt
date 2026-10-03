@@ -91,13 +91,16 @@ class BlockingPresetTest {
     /**
      * The bundled asset path is what makes blocking work offline on first run, so a typo here is a
      * silent loss of protection rather than an error.
+     *
+     * The path is relative to the assets root, because that is what `AssetManager.open` takes — it
+     * is not prefixed with `assets/`.
      */
     @Test
     fun `every list has an asset path and a remote url`() {
         FilterList.entries.forEach { list ->
             assertTrue(
-                "${list.name} asset path should be gzipped under assets/blocklists/",
-                list.assetPath.startsWith("assets/blocklists/") && list.assetPath.endsWith(".gz")
+                "${list.name} asset path should be gzipped under blocklists/",
+                list.assetPath.startsWith("blocklists/") && list.assetPath.endsWith(".gz")
             )
             assertTrue(
                 "${list.name} should have an https source",
@@ -118,20 +121,41 @@ class BlockingPresetTest {
     }
 
     /**
-     * Size is the main reason the preset choice exists, so the ordering has to be defensible rather
-     * than accidental. Trackers-only should not be the largest.
+     * What actually distinguishes the presets is *which kind* of list is in them, not how many.
+     *
+     * An earlier version of this asserted `TRACKERS_ONLY.lists.size < BALANCED.lists.size`, which is
+     * false — both are two lists. List count was never a proxy for engine size: EasyPrivacy is a
+     * third smaller than EasyList, so trackers-only is genuinely lighter with the same number of
+     * entries. Asserting the property that matters instead.
      */
     @Test
-    fun `trackers only is smaller than balanced`() {
+    fun `presets differ by which lists they contain, not how many`() {
+        val adLists = setOf(
+            FilterList.EASYLIST,
+            FilterList.UBLOCK_FILTERS,
+            FilterList.UBLOCK_MOBILE
+        )
+
         assertNotEquals(
             BlockingPreset.TRACKERS_ONLY.listNames,
             BlockingPreset.HELIOS_BALANCED.listNames
         )
+        // Trackers only blocks no ad list at all. That is the whole point of it.
         assertTrue(
-            BlockingPreset.TRACKERS_ONLY.lists.size < BlockingPreset.HELIOS_BALANCED.lists.size
+            "TRACKERS_ONLY should contain no ad list",
+            BlockingPreset.TRACKERS_ONLY.lists.none { it in adLists }
         )
         assertTrue(
-            BlockingPreset.UBLOCK_STRICT.lists.size >= BlockingPreset.HELIOS_BALANCED.lists.size
+            "HELIOS_BALANCED should contain an ad list",
+            BlockingPreset.HELIOS_BALANCED.lists.any { it in adLists }
+        )
+        assertTrue(
+            "HELIOS_BALANCED should contain no annoyances list",
+            BlockingPreset.HELIOS_BALANCED.lists.none { it.name.startsWith("UBLOCK_ANNOYANCES") }
+        )
+        assertTrue(
+            "Strict is a superset of balanced",
+            BlockingPreset.HELIOS_BALANCED.lists.all { it in BlockingPreset.UBLOCK_STRICT.lists }
         )
     }
 
