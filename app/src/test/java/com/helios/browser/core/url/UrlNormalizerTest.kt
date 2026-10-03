@@ -124,7 +124,9 @@ class UrlNormalizerTest {
         assertEquals("mailto", UrlNormalizer.schemeOf("mailto:a@b.com"))
         assertEquals("https", UrlNormalizer.schemeOf("HTTPS://example.com"))
         assertEquals("intent", UrlNormalizer.schemeOf("intent://scan/#Intent;scheme=zxing;end"))
-        assertEquals("x-custom", UrlNormalizer.schemeOf("x-custom+1.0:body"))
+        // The whole prefix is the scheme: RFC 3986 allows ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ),
+        // so + and . are part of it rather than a separator.
+        assertEquals("x-custom+1.0", UrlNormalizer.schemeOf("x-custom+1.0:body"))
 
         // Not schemes.
         assertNull(UrlNormalizer.schemeOf("example.com"))

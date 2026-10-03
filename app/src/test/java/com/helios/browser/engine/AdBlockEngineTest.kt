@@ -89,8 +89,11 @@ class AdBlockEngineTest {
             "report.pdf",
             AdBlockEngine.sanitizeFileName("attachment; filename=\"report.pdf\"", "https://x.com")
         )
+        // Only the final segment survives, so a traversal cannot escape the download folder. (This
+        // expectation used to read "evil.php", which was a copy-paste slip: the input ends in
+        // passwd, and the point of the case is that only "passwd" is left.)
         assertEquals(
-            "evil.php",
+            "passwd",
             AdBlockEngine.sanitizeFileName("../../etc/passwd", "https://x.com")
         )
         assertEquals(
