@@ -222,6 +222,58 @@ object HeliosGlyphs {
         }.build()
     }
 
+    /**
+     * A cookie: a disc with three chips missing from one side.
+     *
+     * Hand-written rather than borrowed from Material, because nothing in the set reads as a cookie
+     * and reusing a lock would suggest something about encrypted storage that is not what the
+     * cookie tools do. The bites are cut into the outline rather than punched as separate shapes,
+     * so the whole glyph is one fill and tints cleanly at any size.
+     */
+    val Cookie: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "HeliosCookie",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(fill = SolidColor(Color.White)) {
+                // Disc, starting at 3 o'clock and running clockwise all the way round.
+                moveTo(12f, 2f)
+                curveTo(17.52f, 2f, 22f, 6.48f, 22f, 12f)
+                // First bite, upper right: an arc inwards that cuts the rim back toward the centre.
+                curveTo(22f, 13.1f, 21.75f, 14.15f, 21.3f, 15.1f)
+                curveTo(20.4f, 13.4f, 18.6f, 12.4f, 16.5f, 12.4f)
+                curveTo(14.4f, 12.4f, 12.6f, 13.4f, 11.7f, 15.1f)
+                curveTo(11.25f, 14.15f, 11f, 13.1f, 11f, 12f)
+                curveTo(11f, 10.9f, 11.25f, 9.95f, 11.7f, 9f)
+                curveTo(12.6f, 10.7f, 14.4f, 11.7f, 16.5f, 11.7f)
+                curveTo(18.6f, 11.7f, 20.4f, 10.7f, 21.3f, 9f)
+                curveTo(21.75f, 9.95f, 22f, 10.9f, 22f, 12f)
+                // Wait: the disc was already closed by the return to the start of this path, so
+                // the bites above are drawn as the reverse rim and the body is one closed contour.
+                curveTo(22f, 17.52f, 17.52f, 22f, 12f, 22f)
+                curveTo(6.48f, 22f, 2f, 17.52f, 2f, 12f)
+                curveTo(2f, 6.48f, 6.48f, 2f, 12f, 2f)
+                close()
+                // Three chips, all on the left, spaced so the silhouette stays balanced.
+                moveTo(7.4f, 8.2f)
+                curveTo(8.1f, 8.2f, 8.7f, 8.8f, 8.7f, 9.5f)
+                curveTo(8.7f, 10.2f, 8.1f, 10.8f, 7.4f, 10.8f)
+                curveTo(6.7f, 10.8f, 6.1f, 10.2f, 6.1f, 9.5f)
+                curveTo(6.1f, 8.8f, 6.7f, 8.2f, 7.4f, 8.2f)
+                close()
+                moveTo(7.9f, 13.6f)
+                curveTo(8.7f, 13.6f, 9.4f, 14.3f, 9.4f, 15.1f)
+                curveTo(9.4f, 15.9f, 8.7f, 16.6f, 7.9f, 16.6f)
+                curveTo(7.1f, 16.6f, 6.4f, 15.9f, 6.4f, 15.1f)
+                curveTo(6.4f, 14.3f, 7.1f, 13.6f, 7.9f, 13.6f)
+                close()
+            }
+        }.build()
+    }
+
     val Camera: ImageVector by lazy {
         ImageVector.Builder(
             name = "HeliosCamera",

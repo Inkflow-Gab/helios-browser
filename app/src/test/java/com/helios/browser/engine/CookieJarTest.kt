@@ -210,6 +210,76 @@ class CookieJarTest {
         assertEquals("cursor.com", CookieJar.singleHostOf(entries))
     }
 
+    // --- host fit: the decision that was wrong twice -----------------------------------------------
+
+    /**
+     * A jar spanning several hosts must be refused.
+     *
+     * This is the bug worth a test. The check used to fire only when a single host could be
+     * identified, so a mixed jar passed straight through and would have been written against
+     * whichever site happened to be open -- setting one site's session token on another.
+     */
+    @Test
+    fun `a jar spanning two hosts is refused rather than applied`() {
+        val entries = CookieJar.parse(
+            """
+            a.test	FALSE	/	FALSE	0	n1	v1
+            b.test	FALSE	/	FALSE	0	n2	v2
+            """.trimIndent()
+        ).entries
+
+        assertEquals(CookieJar.HostFit.MIXED_HOSTS, CookieJar.hostFit(entries, "a.test"))
+    }
+
+    @Test
+    fun `a jar for another site is refused`() {
+        val entries = CookieJar.parse("cursor.com\tFALSE\t/\tFALSE\t0\tn\tv").entries
+        assertEquals(CookieJar.HostFit.DIFFERENT_HOST, CookieJar.hostFit(entries, "example.com"))
+    }
+
+    @Test
+    fun `an exact host matches`() {
+        val entries = CookieJar.parse("cursor.com\tFALSE\t/\tFALSE\t0\tn\tv").entries
+        assertEquals(CookieJar.HostFit.MATCHES, CookieJar.hostFit(entries, "cursor.com"))
+    }
+
+    /** A cookie for the parent domain is legitimately set while a subdomain is open. */
+    @Test
+    fun `a parent domain jar matches an open subdomain`() {
+        val entries = CookieJar.parse("example.com\tTRUE\t/\tFALSE\t0\tn\tv").entries
+        assertEquals(CookieJar.HostFit.MATCHES, CookieJar.hostFit(entries, "app.example.com"))
+    }
+
+    /** And the reverse, because a subdomain cookie can be scoped up to a host-only page. */
+    @Test
+    fun `a subdomain jar matches an open parent`() {
+        val entries = CookieJar.parse("app.example.com\tFALSE\t/\tFALSE\t0\tn\tv").entries
+        assertEquals(CookieJar.HostFit.MATCHES, CookieJar.hostFit(entries, "example.com"))
+    }
+
+    /**
+     * The reason a bare `endsWith` is wrong: without the dot, a domain that merely *ends with*
+     * another would pass, handing a session token to a domain that has no business holding it.
+     */
+    @Test
+    fun `a domain that merely ends with the jar host does not match`() {
+        val entries = CookieJar.parse("example.com\tFALSE\t/\tFALSE\t0\tn\tv").entries
+        assertEquals(CookieJar.HostFit.DIFFERENT_HOST, CookieJar.hostFit(entries, "notexample.com"))
+        assertEquals(CookieJar.HostFit.DIFFERENT_HOST, CookieJar.hostFit(entries, "evilexample.com"))
+    }
+
+    @Test
+    fun `host matching ignores case and a leading dot`() {
+        val entries = CookieJar.parse(".Example.COM\tTRUE\t/\tFALSE\t0\tn\tv").entries
+        assertEquals(CookieJar.HostFit.MATCHES, CookieJar.hostFit(entries, "API.example.com"))
+    }
+
+    @Test
+    fun `no open host means no match`() {
+        val entries = CookieJar.parse("cursor.com\tFALSE\t/\tFALSE\t0\tn\tv").entries
+        assertEquals(CookieJar.HostFit.DIFFERENT_HOST, CookieJar.hostFit(entries, null))
+    }
+
     @Test
     fun `leading dots on the domain are tolerated`() {
         val entries = CookieJar.parse(".x.test\tFALSE\t/\tFALSE\t0\tn\tv").entries

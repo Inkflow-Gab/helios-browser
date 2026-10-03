@@ -34,7 +34,25 @@ class CookieTools(private val cookieManager: CookieManager = CookieManager.getIn
         NOT_A_PAGE,
 
         /** The pasted text contained no readable lines. */
-        NOTHING_PARSED
+        NOTHING_PARSED,
+
+        /**
+         * The jar's cookies belong to a different site than the one open.
+         *
+         * A distinct case from [NOT_A_PAGE] because the message is different: there is a page, it is
+         * just the wrong one. Reporting this as "open a page first" sends the user to do something
+         * that will not help.
+         */
+        HOST_MISMATCH,
+
+        /**
+         * The jar spans several hosts, so there is no page it can be scoped to.
+         *
+         * Refused rather than applied against whichever site happened to be open. Applying it would
+         * set a session cookie for one site on another, which at best logs the user out somewhere
+         * and at worst hands a valid token to a domain that should never see it.
+         */
+        MIXED_HOSTS
     }
 
     /** Outcome of applying a jar. */
@@ -80,12 +98,17 @@ class CookieTools(private val cookieManager: CookieManager = CookieManager.getIn
             return
         }
 
-        // A jar spanning several hosts cannot be applied against one URL. Applying it anyway would
-        // set someone's session cookie on whichever site happened to be open.
-        val jarHost = CookieJar.singleHostOf(entries)
-        val currentHost = UrlNormalizer.hostOf(pageUrl)
-        if (jarHost != null && currentHost != null && !hostsMatch(jarHost, currentHost)) {
-            onDone(ApplyResult(0, 0, parsed.rejected, Refusal.NOT_A_PAGE))
+        // Whether this jar belongs to the open page. The decision lives in CookieJar so it is unit
+        // tested: as an inline `if` it once let a multi-host jar through, because the check only
+        // fired when a single host could be identified, while the comment above it promised the
+        // opposite.
+        val refusal = when (CookieJar.hostFit(entries, UrlNormalizer.hostOf(pageUrl))) {
+            CookieJar.HostFit.MATCHES -> null
+            CookieJar.HostFit.MIXED_HOSTS -> Refusal.MIXED_HOSTS
+            CookieJar.HostFit.DIFFERENT_HOST -> Refusal.HOST_MISMATCH
+        }
+        if (refusal != null) {
+            onDone(ApplyResult(0, 0, parsed.rejected, refusal))
             return
         }
 
@@ -210,18 +233,5 @@ class CookieTools(private val cookieManager: CookieManager = CookieManager.getIn
                 else CookieEntry(domain = host, name = name, value = value)
             }
         return CookieJar.format(entries)
-    }
-
-    /**
-     * Whether two hosts may share cookies.
-     *
-     * Exact match or parent domain, not a suffix match: `notcursor.com` must not be treated as
-     * `cursor.com`, which is the whole reason a naive `endsWith` check is wrong here.
-     */
-    private fun hostsMatch(jarHost: String, currentHost: String): Boolean {
-        val a = jarHost.lowercase().removePrefix(".")
-        val b = currentHost.lowercase().removePrefix(".")
-        if (a == b) return true
-        return b.endsWith(".$a") || a.endsWith(".$b")
     }
 }

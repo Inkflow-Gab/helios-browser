@@ -150,6 +150,12 @@ fun BrowserMenuSheet(
                                 // link, which looks broken in the receiving app.
                                 onIntent(BrowserIntent.SharePage(open.url, open.title))
                             })
+                            // Page-scoped, so it only appears with a page loaded: there are no
+                            // cookies to act on otherwise, and offering it there would open onto
+                            // an empty sheet that says "open a page first".
+                            add(MenuTile("Cookies", HeliosGlyphs.Cookie) {
+                                onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Cookies))
+                            })
                         } else {
                             // With no page loaded there is nothing to copy or share, so those two
                             // slots go to the things that are useful on the start page instead.

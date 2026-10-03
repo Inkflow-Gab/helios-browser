@@ -273,6 +273,44 @@ object CookieJar {
     fun singleHostOf(entries: List<CookieEntry>): String? =
         entries.map { it.domain.removePrefix(".").lowercase(Locale.ROOT) }.distinct().singleOrNull()
 
+    /** Whether a jar may be applied against the page currently open. */
+    enum class HostFit {
+        /** Every cookie belongs to the open page, or to a parent of it. */
+        MATCHES,
+
+        /** The jar spans more than one host, so there is no single page it can be scoped to. */
+        MIXED_HOSTS,
+
+        /** The jar is for a different site entirely. */
+        DIFFERENT_HOST
+    }
+
+    /**
+     * Whether [entries] may be applied against [currentHost].
+     *
+     * ## Why this is a function and not an `if` at the call site
+     * It was an `if` at the call site, and it had two bugs that way:
+     *  - a jar spanning several hosts was *allowed through*, because the check only fired when a
+     *    single host could be identified. The comment above it promised the opposite.
+     *  - a genuine host mismatch was reported to the user as "not a page", which is not why it
+     *    failed, so a user who pasted the wrong site's cookies was told to open a page first.
+     *
+     * Pure and Android-free so it is unit tested, which is the only reason those cannot come back.
+     *
+     * ## Parent and child both count
+     * A cookie for `example.com` is legitimately set while `app.example.com` is open, and vice
+     * versa. Matching is exact or parent, never a bare suffix, so `notexample.com` is never treated
+     * as `example.com`.
+     */
+    fun hostFit(entries: List<CookieEntry>, currentHost: String?): HostFit {
+        val jarHost = singleHostOf(entries) ?: return HostFit.MIXED_HOSTS
+        if (currentHost == null) return HostFit.DIFFERENT_HOST
+        val a = jarHost.lowercase(Locale.ROOT).removePrefix(".")
+        val b = currentHost.lowercase(Locale.ROOT).removePrefix(".")
+        if (a == b || b.endsWith(".$a") || a.endsWith(".$b")) return HostFit.MATCHES
+        return HostFit.DIFFERENT_HOST
+    }
+
     /** A host is plausible if it has a dot, no scheme or port, and only host-legal characters. */
     private fun looksLikeHost(candidate: String): Boolean {
         val host = candidate.trim().removePrefix(".")
