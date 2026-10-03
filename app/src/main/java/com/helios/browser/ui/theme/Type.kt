@@ -38,7 +38,10 @@ private fun interFont(weight: FontWeight): Font = Font(
         FontVariation.weight(weight.weight),
         // Optical size axis. Pinning it to the largest step keeps small text from looking spindly
         // on a high-density screen without shipping a second file.
-        FontVariation.opticalSizing(32f)
+        //
+        // `opticalSizing` takes a TextUnit, not a Float, and asserts the unit is sp — passing a raw
+        // Float does not compile. Inter's opsz axis tops out around 32.
+        FontVariation.opticalSizing(32.sp)
     )
 )
 
