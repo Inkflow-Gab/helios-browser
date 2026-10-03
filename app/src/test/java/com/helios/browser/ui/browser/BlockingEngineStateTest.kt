@@ -108,9 +108,12 @@ class BlockingEngineStateTest {
             "dropped by toUiState: ${snapshotFields - uiFields}",
             uiFields.containsAll(snapshotFields)
         )
-        // And the UI type is allowed to add its own, which is where `preset` and `activePreset`
-        // come from. Pinning the exact surplus stops that from quietly growing.
-        assertEquals(setOf("preset", "activePreset"), uiFields - snapshotFields)
+        // The UI type adds exactly one field of its own: `activePreset`. Note that `preset` is *not*
+        // a surplus — the snapshot has one too, holding what the running engine was built from,
+        // while the UI type's `preset` holds what the user chose. The two same-named fields mean
+        // different things, which is why `toUiState` takes the chosen value as a parameter rather
+        // than reading it off the snapshot.
+        assertEquals(setOf("activePreset"), uiFields - snapshotFields)
     }
 
     @Test
