@@ -171,7 +171,7 @@ pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeLoad(
 /// start, hands them back to [`nativeDeserialize`].
 #[no_mangle]
 pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeSerialize(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
 ) -> jbyteArray {
     fail_open!(std::ptr::null_mut(), {
@@ -194,7 +194,7 @@ pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeSerial
 /// [`nativeLoad`]. The stored engine is only swapped in once deserialisation has fully succeeded.
 #[no_mangle]
 pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeDeserialize(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     data: JByteArray,
 ) -> jboolean {
@@ -259,6 +259,9 @@ pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeCheck(
             return JNI_FALSE;
         };
 
+        // The closure must return `jboolean` throughout: the `return JNI_FALSE` statements below fix
+        // the closure's return type as `u8`, so a bare `bool` from `should_block()` would not
+        // unify with it. Hence the explicit `as jboolean` on the tail expression.
         with_engine(|engine| {
             // A URL adblock-rust cannot parse is one this browser cannot load either, so failing
             // open costs nothing.
@@ -268,9 +271,9 @@ pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeCheck(
             if !request.is_supported {
                 return JNI_FALSE;
             }
-            engine.check_network_request(&request).should_block()
+            engine.check_network_request(&request).should_block() as jboolean
         })
-        .unwrap_or(false) as jboolean
+        .unwrap_or(JNI_FALSE)
     })
 }
 

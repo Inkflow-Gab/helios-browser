@@ -37,13 +37,16 @@ jobs:
       # The NDK is not used to build anything directly. cargo-ndk needs it to supply the linker and
       # the sysroot for each Android target.
       #
-      # Pinned by full revision rather than the "r27c" alias: the alias is a marketing name that
-      # has moved between NDK releases, and 27.3.13750724 is the revision it refers to.
+      # `ndk-version` must be the *alias* (`r27c`), not the revision. `nttld/setup-ndk` does no
+      # alias resolution: it builds the URL as `android-ndk-<version>-linux.zip` verbatim, so
+      # passing `27.2.12479018` requests a file that does not exist and 404s. It also derives the
+      # host-arch suffix by parsing `version.slice(1)`, which is only meaningful for an alias
+      # starting with `r`. `r27c` is revision 27.2.12479018.
       - name: Setup Android NDK
         id: ndk
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: 27.3.13750724
+          ndk-version: r27c
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
@@ -62,13 +65,14 @@ jobs:
       - name: Build libhelios_adblock.so for every ABI
         working-directory: native/helios-adblock
         env:
+          # cargo-ndk reads this path for the linker and sysroot. It does not fall back to
+          # ANDROID_HOME here, so the variable has to be set explicitly.
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
-        # x86 and x86_64 are built so the APK runs on emulators; arm64 is what real phones use.
+        # x86_64 is built so the APK runs on emulators; arm64-v8a is what real phones use.
         # armeabi-v7a is kept for old 32-bit devices.
         #
-        # `-o` takes an absolute or workspace-relative output directory and lays the libraries out
-        # as <dir>/<abi>/lib*.so, which is exactly the layout AGP picks up from app/src/jniLibs.
-        # No Gradle native configuration is needed for that.
+        # `-o` is the output directory, and cargo-ndk writes the `<abi>/lib*.so` layout Android
+        # expects — so this lands directly in `app/src/jniLibs` with no Gradle native config.
         run: |
           cargo ndk \
             -t arm64-v8a \
