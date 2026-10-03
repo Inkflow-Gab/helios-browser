@@ -51,6 +51,23 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
+      # cargo-ndk supplies the linker, the sysroot and the CC wrapper, but it does *not* install
+      # Rust's standard library for the target — that comes from rustup. Without this every target
+      # build dies at `can't find crate for core`.
+      #
+      # The triples are the Rust names for the Android ABIs, which is why the list does not match the
+      # `-t` flags below one-for-one in spelling:
+      #   arm64-v8a   -> aarch64-linux-android
+      #   armeabi-v7a -> armv7-linux-androideabi
+      #   x86_64      -> x86_64-linux-android
+      - name: Add Android Rust targets
+        run: |
+          rustup target add \
+            aarch64-linux-android \
+            armv7-linux-androideabi \
+            x86_64-linux-android
+          rustup target list --installed
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:

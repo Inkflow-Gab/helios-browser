@@ -451,11 +451,63 @@ mod tests {
         assert!(!blocked(&engine, "https://tracker.test/ok.js", "https://site.test/", "script"));
     }
 
+    /// `$domain=` is an allowlist of documents, not a blocklist. The rule applies *only* when the
+    /// top-level document is one of the listed domains — which is the opposite of the intuitive
+    /// reading, and the reason the first assertion below is a `!`.
+    ///
+    /// Getting this backwards is not a hypothetical: ad networks use `$domain=` to scope an
+    /// aggressive rule to the sites that actually serve the ads, so a browser that inverts it
+    /// either misses every ad or breaks every other site on the web.
     #[test]
-    fn domain_scoped_rule_does_not_leak() {
+    fn domain_scoped_rule_applies_only_on_listed_documents() {
         let engine = engine_from("||widget.test^$domain=allowed.test");
-        assert!(blocked(&engine, "https://widget.test/x.js", "https://other.test/", "script"));
-        assert!(!blocked(&engine, "https://widget.test/x.js", "https://allowed.test/", "script"));
+
+        // On a listed document the rule is in force.
+        assert!(blocked(
+            &engine,
+            "https://widget.test/x.js",
+            "https://allowed.test/",
+            "script"
+        ));
+
+        // On any other document the rule does not exist, so the request is left alone.
+        assert!(!blocked(
+            &engine,
+            "https://widget.test/x.js",
+            "https://other.test/",
+            "script"
+        ));
+    }
+
+    /// A listed domain covers its subdomains. Ad networks write `$domain=example.com` meaning
+    /// "and every www./m./sub. under it", so a strict equality match would silently under-block.
+    #[test]
+    fn domain_scoped_rule_includes_subdomains() {
+        let engine = engine_from("||widget.test^$domain=allowed.test");
+        assert!(blocked(
+            &engine,
+            "https://widget.test/x.js",
+            "https://www.allowed.test/",
+            "script"
+        ));
+    }
+
+    /// `~domain=` is the negation form: apply everywhere *except* the listed documents.
+    #[test]
+    fn negated_domain_rule_excludes_listed_documents() {
+        let engine = engine_from("||widget.test^$domain=~safe.test");
+        assert!(blocked(
+            &engine,
+            "https://widget.test/x.js",
+            "https://other.test/",
+            "script"
+        ));
+        assert!(!blocked(
+            &engine,
+            "https://widget.test/x.js",
+            "https://safe.test/",
+            "script"
+        ));
     }
 
     #[test]
