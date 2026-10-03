@@ -131,8 +131,16 @@ object CookieJar {
 
     /** What [parse] produced, including what it could not read. */
     sealed interface Result {
+        /** The parsed entries, whichever variant this is. */
+        val entries: List<CookieEntry>
+
+        /** The unreadable lines, or empty. Never null. */
+        val rejected: List<String>
+
         /** Every line parsed. */
-        data class Parsed(val entries: List<CookieEntry>) : Result
+        data class Parsed(override val entries: List<CookieEntry>) : Result {
+            override val rejected: List<String> get() = emptyList()
+        }
 
         /**
          * Some lines parsed and some did not.
@@ -141,19 +149,11 @@ object CookieJar {
          *   a user who pastes a jar and sees no error will assume it all applied, and a cookie that
          *   silently did not is an authentication failure with no cause.
          */
-        data class Partial(val entries: List<CookieEntry>, val rejected: List<String>) : Result
+        data class Partial(
+            override val entries: List<CookieEntry>,
+            override val rejected: List<String>
+        ) : Result
     }
-
-    /** The parsed entries, whatever else happened. */
-    val Result.entries: List<CookieEntry>
-        get() = when (this) {
-            is Result.Parsed -> entries
-            is Result.Partial -> entries
-        }
-
-    /** The unreadable lines, or empty. */
-    val Result.rejected: List<String>
-        get() = (this as? Result.Partial)?.rejected.orEmpty()
 
     fun nowEpochSeconds(): Long = System.currentTimeMillis() / 1000
 
