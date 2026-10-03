@@ -19,7 +19,11 @@ class BrowserTabTest {
     fun `secure flag only reflects https`() {
         assertTrue(BrowserTab(id = "1", url = "https://example.com").isSecure)
         assertFalse(BrowserTab(id = "1", url = "http://example.com").isSecure)
-        assertFalse(BrowserTab(id = "1", url = "HTTPS://EXAMPLE.COM").isSecure)
+        // Schemes are case-insensitive per RFC 3986, so an uppercase HTTPS is still secure and the
+        // lock icon must show. This asserts the flag, not the string.
+        assertTrue(BrowserTab(id = "1", url = "HTTPS://EXAMPLE.COM").isSecure)
+        // The start page sentinel is not a page at all, so it is not secure.
+        assertFalse(BrowserTab(id = "1", url = BrowserTab.START_PAGE_URL).isSecure)
     }
 
     @Test

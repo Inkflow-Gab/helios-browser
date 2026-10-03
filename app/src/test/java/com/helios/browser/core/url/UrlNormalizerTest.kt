@@ -3,6 +3,7 @@ package com.helios.browser.core.url
 import com.helios.browser.domain.model.SearchEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,5 +101,44 @@ class UrlNormalizerTest {
             "mailto:someone@example.com",
             UrlNormalizer.resolve("mailto:someone@example.com", SearchEngine.DUCKDUCKGO, upgradeToHttps = true)
         )
+    }
+
+    /**
+     * Schemes with nothing after the colon are the ones a `contains("://")` guard misses, and they
+     * are the common ones. `mailto:` in particular contains a dot, so `looksLikeUrl` accepts it —
+     * which is how this used to come back as `https://mailto:someone@example.com`.
+     */
+    @Test
+    fun `scheme-less bodies are not prefixed with https`() {
+        val engine = SearchEngine.DUCKDUCKGO
+        assertEquals("mailto:a@b.com", UrlNormalizer.resolve("mailto:a@b.com", engine, upgradeToHttps = true))
+        assertEquals("tel:+15551234", UrlNormalizer.resolve("tel:+15551234", engine, upgradeToHttps = true))
+        assertEquals("sms:+15551234", UrlNormalizer.resolve("sms:+15551234", engine, upgradeToHttps = true))
+        assertEquals("geo:37.7,-122.4", UrlNormalizer.resolve("geo:37.7,-122.4", engine, upgradeToHttps = true))
+        // And with the upgrade toggle off, they are still not rewritten.
+        assertEquals("tel:+15551234", UrlNormalizer.resolve("tel:+15551234", engine, upgradeToHttps = false))
+    }
+
+    @Test
+    fun `schemeOf recognises real schemes and rejects search text`() {
+        assertEquals("mailto", UrlNormalizer.schemeOf("mailto:a@b.com"))
+        assertEquals("https", UrlNormalizer.schemeOf("HTTPS://example.com"))
+        assertEquals("intent", UrlNormalizer.schemeOf("intent://scan/#Intent;scheme=zxing;end"))
+        assertEquals("x-custom", UrlNormalizer.schemeOf("x-custom+1.0:body"))
+
+        // Not schemes.
+        assertNull(UrlNormalizer.schemeOf("example.com"))
+        assertNull(UrlNormalizer.schemeOf("hello world"))
+        assertNull(UrlNormalizer.schemeOf("what time: now"))
+        assertNull(UrlNormalizer.schemeOf(":leading colon"))
+        assertNull(UrlNormalizer.schemeOf("1abc:thing"))
+        assertNull(UrlNormalizer.schemeOf(""))
+    }
+
+    /** A colon inside a search term must not turn the whole thing into a scheme. */
+    @Test
+    fun `a colon in a search query does not make it a url`() {
+        val result = UrlNormalizer.resolve("ratio 3:2 explained", SearchEngine.DUCKDUCKGO, upgradeToHttps = true)
+        assertTrue("expected a search URL, got $result", result.startsWith("https://duckduckgo.com/?q="))
     }
 }

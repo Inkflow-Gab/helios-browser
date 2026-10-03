@@ -55,6 +55,12 @@ object AdBlockEngine {
 
     /** Ad exchanges, analytics endpoints and telemetry collectors. */
     val blockedDomains: Set<String> = setOf(
+        // Parent domains first. `matchesHostAndPath` walks *up* from a host to its parents, so a
+        // parent entry covers every subdomain — listing only the subdomains does not cover the
+        // bare domain, which is the mistake this list originally made for doubleclick.
+        "doubleclick.net",
+        "googlesyndication.com",
+
         // Google ad services and analytics
         "pagead2.googlesyndication.com",
         "googleads.g.doubleclick.net",
@@ -156,15 +162,101 @@ object AdBlockEngine {
         }
     }
 
-    /** Filename for a downloaded file, with path separators and control characters removed. */
+    /**
+     * Filename for a downloaded file, with path separators and control characters removed.
+     *
+     * Handles both shapes a caller passes: a bare filename, and a full `Content-Disposition` value.
+     * The latter is what servers actually send, and it has to be parsed rather than sanitised as if
+     * it were the filename — `attachment; filename="report.pdf"` contains no path separators, so a
+     * naive strip yields `attachment__filename__report_pdf_` instead of `report.pdf`.
+     *
+     * Path traversal is blocked by taking only the last segment and rejecting anything that still
+     * looks like a directory, so `../../etc/passwd` cannot escape into a parent's download folder.
+     */
     fun sanitizeFileName(candidate: String?, fallbackUrl: String): String {
-        val raw = candidate?.substringAfterLast('/')?.substringAfterLast('\\')?.trim()
-        val cleaned = raw?.map { char ->
-            if (char.isLetterOrDigit() || char in "._- ()&[]'!,+@") char else '_'
-        }?.joinToString("")?.trim('.', ' ')
-        return cleaned?.takeIf { it.isNotBlank() }
+        val fromHeader = filenameFromContentDisposition(candidate)
+        val cleaned = fromHeader
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
+            ?.trim()
+            ?.map { char -> if (char.isLetterOrDigit() || char in ALLOWED_PUNCTUATION) char else '_' }
+            ?.joinToString("")
+            ?.trim('.', ' ')
+            ?.takeIf { it.isNotBlank() && !it.all { char -> char == '_' || char == '.' } }
+
+        return cleaned
             ?: UrlNormalizer.hostOf(fallbackUrl)?.replace(Regex("[^a-zA-Z0-9.-]"), "-")
                 ?.plus("-download")
             ?: "download"
     }
+
+    /**
+     * Extracts the `filename` parameter from a `Content-Disposition` header, if there is one.
+     *
+     * Returns null when [candidate] is not a header at all, so the caller can treat it as a plain
+     * filename. `filename*=` (RFC 5987 extended form) is preferred over `filename=` when both are
+     * present, since that is the one carrying the real name; its `UTF-8''` prefix is stripped.
+     */
+    private fun filenameFromContentDisposition(candidate: String?): String? {
+        val value = candidate?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (!value.contains(';')) return value // no parameters, so this is a bare filename
+        if (!value.substringBefore(';').contains("=", ignoreCase = true) &&
+            !value.startsWith("attachment", ignoreCase = true) &&
+            !value.startsWith("inline", ignoreCase = true)
+        ) {
+            return value
+        }
+
+        val extended = parameterValue(value, "filename*")
+        val plain = parameterValue(value, "filename")
+        val chosen = extended ?: plain ?: return null
+
+        // `UTF-8''caf%C3%A9.txt` -> `cafe.txt`. The charset'' prefix goes, then the escapes are
+        // decoded so the user gets a real name rather than `caf_C3_A9.txt`.
+        return percentDecode(chosen.substringAfter("''", chosen).trim('"', ' '))
+    }
+
+    /**
+     * Decodes `%XX` escapes as UTF-8, leaving everything else alone.
+     *
+     * Deliberately not `URLDecoder.decode`: that also turns `+` into a space, which is a form-encoding
+     * rule and not part of RFC 5987, so it would corrupt filenames containing a literal `+`.
+     *
+     * Decoding before the character filter is safe, not after: the filter replaces `/`, `\` and
+     * every other character outside its allowlist, so a `%2F` in a hostile header cannot survive into
+     * a path. A malformed escape is left verbatim rather than throwing.
+     */
+    private fun percentDecode(value: String): String {
+        if (!value.contains('%')) return value
+        val out = java.io.ByteArrayOutputStream(value.length)
+        var index = 0
+        while (index < value.length) {
+            val char = value[index]
+            val code = if (char == '%' && index + 2 < value.length) {
+                value.substring(index + 1, index + 3).toIntOrNull(16)
+            } else {
+                null
+            }
+            if (code != null) {
+                out.write(code)
+                index += 3
+            } else {
+                out.write(char.toString().toByteArray(Charsets.UTF_8))
+                index++
+            }
+        }
+        return String(out.toByteArray(), Charsets.UTF_8)
+    }
+
+    /** The value of [name] in a semicolon-separated header, unquoted. Null when absent. */
+    private fun parameterValue(header: String, name: String): String? = header.split(';')
+        .mapNotNull { part ->
+            val key = part.substringBefore('=').trim()
+            if (!key.equals(name, ignoreCase = true)) return@mapNotNull null
+            part.substringAfter('=', "").trim().trim('"').takeIf { it.isNotBlank() }
+        }
+        .firstOrNull()
+
+    /** Punctuation kept in a sanitised filename. Deliberately short: no `/`, `\` or `:`. */
+    private const val ALLOWED_PUNCTUATION = "._- ()&[]'!,+@"
 }

@@ -55,16 +55,44 @@ object UrlNormalizer {
     }
 
     /**
+     * The scheme of [input], if it already carries one.
+     *
+     * Matches RFC 3986: a letter, then letters/digits/`+`/`-`/`.`, then a colon. This is deliberately
+     * broader than a `contains("://")` check, because plenty of real schemes have no slashes —
+     * `mailto:someone@example.com`, `tel:+15551234`, `sms:+15551234`, `geo:0,0` and `urn:isbn:…` all
+     * have nothing after the colon but a body.
+     *
+     * Getting this wrong is not academic: `mailto:` contains a dot, so `looksLikeUrl` accepts it, and
+     * a caller that only special-cases `://` would return `https://mailto:someone@example.com` from
+     * the omnibox and then fail to launch a mail client.
+     *
+     * Returns null when there is no scheme, so `example.com` and `hello world` are not mistaken for
+     * scheme-bearing input. A colon alone is not enough either, because `search terms: with colon`
+     * is a search — the whole prefix has to look like a scheme.
+     */
+    fun schemeOf(input: String): String? {
+        val colon = input.indexOf(':')
+        if (colon <= 0) return null
+        val scheme = input.substring(0, colon)
+        if (!scheme[0].isLetter()) return null
+        if (!scheme.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }) return null
+        return scheme.lowercase(Locale.ROOT)
+    }
+
+    /**
      * Turns raw omnibox input into a URL that is safe to hand to a WebView: web URLs are upgraded
-     * to HTTPS when [upgradeToHttps] is set, bare hostnames get a scheme, everything else is
-     * searched with [engine].
+     * to HTTPS when [upgradeToHttps] is set, bare hostnames get a scheme, and anything already
+     * carrying a non-web scheme is passed through untouched so the browser can hand it to another
+     * app. Everything else is searched with [engine].
      */
     fun resolve(input: String, engine: SearchEngine, upgradeToHttps: Boolean): String {
         val trimmed = input.trim()
         if (isWebUrl(trimmed)) {
             return if (upgradeToHttps) upgradeToHttps(trimmed) else trimmed
         }
-        if (trimmed.contains("://")) return trimmed // some other scheme: let the browser decide
+        // Any other scheme goes out verbatim. This has to come before `looksLikeUrl`, which happily
+        // accepts `mailto:` and friends precisely because they contain a dot.
+        if (schemeOf(trimmed) != null) return trimmed
         if (looksLikeUrl(trimmed)) {
             val withScheme = "https://$trimmed"
             return if (upgradeToHttps) withScheme else withScheme.replaceFirst("https://", "http://")

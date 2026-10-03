@@ -107,4 +107,68 @@ class AdBlockEngineTest {
         )
         assertEquals("download", AdBlockEngine.sanitizeFileName(null, "not a url"))
     }
+
+    /**
+     * Servers send `Content-Disposition`, not a bare filename. Sanitising the whole header as if it
+     * were the filename produced `attachment__filename__report_pdf_`, because it has no path
+     * separators for the traversal guard to key off.
+     */
+    @Test
+    fun `sanitizeFileName parses Content-Disposition headers`() {
+        assertEquals(
+            "report.pdf",
+            AdBlockEngine.sanitizeFileName("attachment; filename=\"report.pdf\"", "https://x.com")
+        )
+        assertEquals(
+            "photo.jpg",
+            AdBlockEngine.sanitizeFileName("attachment; filename=photo.jpg", "https://x.com")
+        )
+        // A bare filename with no parameters must still work.
+        assertEquals("notes.txt", AdBlockEngine.sanitizeFileName("notes.txt", "https://x.com"))
+        // RFC 5987 extended form wins over the plain one, and its escapes are decoded so the user
+        // gets a real name rather than caf_C3_A9.txt.
+        assertEquals(
+            "café.txt",
+            AdBlockEngine.sanitizeFileName(
+                "attachment; filename=\"fallback.txt\"; filename*=UTF-8''caf%C3%A9.txt",
+                "https://x.com"
+            )
+        )
+        // A literal + is not a space: URLDecoder would break this, so the decode is hand-rolled.
+        assertEquals(
+            "a+b.txt",
+            AdBlockEngine.sanitizeFileName(
+                "attachment; filename*=UTF-8''a+b.txt",
+                "https://x.com"
+            )
+        )
+    }
+
+    /** A hostile header must not be able to reintroduce a path. */
+    @Test
+    fun `sanitizeFileName cannot be walked out of the download folder`() {
+        assertEquals(
+            "passwd",
+            AdBlockEngine.sanitizeFileName("attachment; filename=\"../../etc/passwd\"", "https://x.com")
+        )
+        assertEquals(
+            "evil.exe",
+            AdBlockEngine.sanitizeFileName("attachment; filename=\"..\\\\..\\\\evil.exe\"", "https://x.com")
+        )
+    }
+
+    /**
+     * The fallback host list used before the native engine is ready. A parent domain has to be
+     * listed explicitly: `matchesHostAndPath` walks *up* from a host to its parents, so listing
+     * only the subdomains never covers the bare domain.
+     */
+    @Test
+    fun `parent domains are listed so bare hosts are covered`() {
+        assertTrue(AdBlockEngine.matchesHostAndPath("doubleclick.net", "/"))
+        assertTrue(AdBlockEngine.matchesHostAndPath("doubleclick.net", "/ad"))
+        assertTrue(AdBlockEngine.matchesHostAndPath("securepubads.g.doubleclick.net", "/x"))
+        assertTrue(AdBlockEngine.matchesHostAndPath("googlesyndication.com", "/"))
+        // Not over-broad: an unrelated site must be untouched.
+        assertFalse(AdBlockEngine.matchesHostAndPath("notdoubleclick.net", "/"))
+    }
 }

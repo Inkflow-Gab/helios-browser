@@ -103,19 +103,6 @@ class WebRequestClassifierTest {
             )
         )
         assertEquals(
-            WebRequestClassifier.SCRIPT,
-            WebRequestClassifier.classify(
-                "https://x.test/runtime",
-                "*/*",
-                isForMainFrame = false
-            ).let {
-                // No javascript hint and no extension: genuinely ambiguous, and `other` is the
-                // honest answer. Asserted to pin the fallback, not to endorse it.
-                assertEquals(WebRequestClassifier.OTHER, it)
-                it
-            }
-        )
-        assertEquals(
             WebRequestClassifier.IMAGE,
             WebRequestClassifier.classify(
                 "https://x.test/pixel",
@@ -128,6 +115,16 @@ class WebRequestClassifierTest {
             WebRequestClassifier.classify(
                 "https://x.test/font",
                 "font/woff2,*/*",
+                isForMainFrame = false
+            )
+        )
+        // No extension and an Accept of `*/*` is genuinely ambiguous, and `other` is the honest
+        // answer: `other` still matches every untyped rule, so nothing is silently skipped.
+        assertEquals(
+            WebRequestClassifier.OTHER,
+            WebRequestClassifier.classify(
+                "https://x.test/runtime",
+                "*/*",
                 isForMainFrame = false
             )
         )
