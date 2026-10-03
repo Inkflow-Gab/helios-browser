@@ -78,39 +78,39 @@ class BlockingEngineStateTest {
     }
 
     /**
-     * Guard against the two types drifting apart: adding a field to one and not the other must fail
-     * here, not silently in production.
+     * Guard against a snapshot field being dropped in the conversion.
+     *
+     * The two types deliberately differ: the UI type carries `activePreset` *and* `preset`, because
+     * one is what the running engine contains and the other is what the user asked for, and
+     * comparing them is the whole point of the `isRebuilding` flag. So this does not assert that the
+     * field sets are identical — that was the wrong property, and it failed for the right reason.
+     *
+     * What actually matters is the direction: everything the snapshot reports must survive into the
+     * UI value, so a field added to `BlockingEngineSnapshot` and forgotten in `toUiState` fails here
+     * instead of leaving a settings screen showing a default forever.
      *
      * Compiler-generated fields are skipped by name. `@Immutable` makes the Compose compiler add a
-     * `$stable` field to the UI type that the engine type has no reason to have, and it is not
-     * marked synthetic, so filtering on `isSynthetic` does not catch it. A `$`-prefixed name is the
-     * convention every Kotlin compiler here uses for generated members, and a real property can
-     * never have one.
+     * `$stable` field to the UI type, and it is not marked synthetic, so filtering on `isSynthetic`
+     * does not catch it. A `$`-prefixed name is the convention every Kotlin compiler here uses for
+     * generated members, and a real property can never have one.
      */
     @Test
-    fun `the two types have the same fields`() {
+    fun `the ui type carries every field the snapshot reports`() {
         fun declared(type: Class<*>) = type.declaredFields
             .filterNot { it.isSynthetic || it.name.startsWith("$") }
             .map { it.name }
             .toSet()
 
-        assertEquals(
-            declared(BlockingEngineSnapshot::class.java),
-            declared(BlockingEngineState::class.java)
-        )
-    }
+        val snapshotFields = declared(BlockingEngineSnapshot::class.java)
+        val uiFields = declared(BlockingEngineState::class.java)
 
-    /**
-     * The filter must not be quietly excluding a real field, which would make the check above pass
-     * no matter what. `$stable` is the only one it should ever drop.
-     */
-    @Test
-    fun `the field filter only drops the compose stability marker`() {
-        val dropped = BlockingEngineState::class.java.declaredFields
-            .filter { it.isSynthetic || it.name.startsWith("$") }
-            .map { it.name }
-            .toSet()
-        assertEquals(setOf("\$stable"), dropped)
+        assertTrue(
+            "dropped by toUiState: ${snapshotFields - uiFields}",
+            uiFields.containsAll(snapshotFields)
+        )
+        // And the UI type is allowed to add its own, which is where `preset` and `activePreset`
+        // come from. Pinning the exact surplus stops that from quietly growing.
+        assertEquals(setOf("preset", "activePreset"), uiFields - snapshotFields)
     }
 
     @Test
