@@ -1,12 +1,10 @@
 package com.helios.browser.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,10 +14,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -48,7 +50,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.helios.browser.data.TabModel
+import com.helios.browser.domain.model.BrowserTab
+import com.helios.browser.ui.adaptive.HeliosLayout
+import com.helios.browser.ui.browser.BrowserIntent
+import com.helios.browser.ui.browser.BrowserOverlay
+import com.helios.browser.ui.icons.HeliosGlyphs
 import com.helios.browser.ui.icons.HeliosIcons
 import com.helios.browser.ui.theme.HeliosBlue
 import com.helios.browser.ui.theme.HeliosShieldGreen
@@ -57,55 +63,68 @@ import com.helios.browser.ui.theme.HeliosTextPrimary
 import com.helios.browser.ui.theme.HeliosTextSecondary
 import com.helios.browser.ui.theme.HeliosTextTertiary
 
+/** Horizontal drag distance, in pixels, that commits to a tab switch. */
+private const val SWIPE_THRESHOLD = 80f
+
+/**
+ * The omnibox: shields counter, address field, reload, tab count, menu.
+ *
+ * Anchored top or bottom by [layout]. The two positions are not cosmetic: at the bottom it must
+ * clear the gesture pill and sit within thumb reach, at the top it must clear the status bar and the
+ * cutout. Getting either wrong means the field is half-hidden, so the insets are chosen by position
+ * rather than applied uniformly.
+ *
+ * Emits intents only; it holds no browser state of its own beyond the text field and whether it is
+ * currently in edit mode.
+ */
 @Composable
 fun AddressBar(
-    currentTab: TabModel,
-    tabsCount: Int,
-    onNavigate: (String) -> Unit,
-    onReload: () -> Unit,
-    onOpenShields: () -> Unit,
-    onOpenTabs: () -> Unit,
-    onOpenMenu: () -> Unit,
-    onSwipeNextTab: () -> Unit,
-    onSwipePreviousTab: () -> Unit,
-    modifier: Modifier = Modifier
+    tab: BrowserTab?,
+    tabCount: Int,
+    isBookmarked: Boolean,
+    swipePreviousAvailable: Boolean,
+    swipeNextAvailable: Boolean,
+    layout: HeliosLayout,
+    onIntent: (BrowserIntent) -> Unit
 ) {
     var isEditing by remember { mutableStateOf(false) }
-    var inputText by remember(currentTab.url) { mutableStateOf(if (currentTab.url == "helios://start") "" else currentTab.url) }
+    var inputText by remember(tab?.url) {
+        mutableStateOf(if (tab?.isStartPage != false) "" else tab?.url.orEmpty())
+    }
     val focusManager = LocalFocusManager.current
     var totalDragX by remember { mutableFloatStateOf(0f) }
 
-    val displayHost = remember(currentTab.url) {
-        if (currentTab.url == "helios://start" || currentTab.url.isEmpty()) {
-            "Search or type URL"
-        } else {
-            try {
-                val uri = android.net.Uri.parse(currentTab.url)
-                uri.host ?: currentTab.url
-            } catch (_: Exception) {
-                currentTab.url
-            }
-        }
-    }
+    val displayHost = tab?.displayHost ?: "Search or type URL"
 
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
+            // At the bottom the gesture pill owns this space; at the top the status bar and any
+            // cutout do. Applying both would double the gap and make the bar look detached.
+            .then(
+                if (layout.omniboxAtTop) {
+                    Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                } else {
+                    Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                }
+            )
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        // Progress bar on page loading
         AnimatedVisibility(
-            visible = currentTab.isLoading,
+            visible = tab?.isLoading == true,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
             LinearProgressIndicator(
+                progress = { (tab?.progress ?: 0) / 100f },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(2.dp)
                     .clip(RoundedCornerShape(1.dp)),
                 color = HeliosBlue,
-                trackColor = Color.Transparent
+                trackColor = Color.Transparent,
+                gapSize = 0.dp,
+                drawStopIndicator = {}
             )
         }
 
@@ -114,20 +133,20 @@ fun AddressBar(
         GlassmorphicSurface(
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(Unit) {
+                .pointerInput(swipePreviousAvailable, swipeNextAvailable) {
                     detectHorizontalDragGestures(
                         onDragStart = { totalDragX = 0f },
                         onDragEnd = {
-                            if (totalDragX > 80f) {
-                                onSwipePreviousTab()
-                            } else if (totalDragX < -80f) {
-                                onSwipeNextTab()
+                            when {
+                                totalDragX > SWIPE_THRESHOLD && swipePreviousAvailable ->
+                                    onIntent(BrowserIntent.GoBack)
+
+                                totalDragX < -SWIPE_THRESHOLD && swipeNextAvailable ->
+                                    onIntent(BrowserIntent.GoForward)
                             }
                             totalDragX = 0f
                         },
-                        onHorizontalDrag = { _, dragAmount ->
-                            totalDragX += dragAmount
-                        }
+                        onHorizontalDrag = { _, dragAmount -> totalDragX += dragAmount }
                     )
                 },
             shape = RoundedCornerShape(26.dp)
@@ -139,14 +158,14 @@ fun AddressBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Shields button with live count badge
+                // Shields, tinted green once something has been blocked this session.
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = onOpenShields
+                            onClick = { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Shields)) }
                         )
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
@@ -155,13 +174,13 @@ fun AddressBar(
                         Icon(
                             imageVector = HeliosIcons.Shield,
                             contentDescription = "Shields",
-                            tint = if (currentTab.blockedAdsCount > 0) HeliosShieldGreen else HeliosTextSecondary,
+                            tint = if ((tab?.blockedCount ?: 0) > 0) HeliosShieldGreen else HeliosTextSecondary,
                             modifier = Modifier.size(19.dp)
                         )
-                        if (currentTab.blockedAdsCount > 0) {
+                        if ((tab?.blockedCount ?: 0) > 0) {
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = currentTab.blockedAdsCount.toString(),
+                                text = tab?.blockedCount.toString(),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = HeliosShieldGreen
@@ -170,7 +189,7 @@ fun AddressBar(
                     }
                 }
 
-                // Middle address / search pill
+                // Address / search pill
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -196,7 +215,7 @@ fun AddressBar(
                             keyboardActions = KeyboardActions(
                                 onGo = {
                                     if (inputText.isNotBlank()) {
-                                        onNavigate(inputText)
+                                        onIntent(BrowserIntent.Navigate(inputText))
                                     }
                                     isEditing = false
                                     focusManager.clearFocus()
@@ -208,11 +227,20 @@ fun AddressBar(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (currentTab.url.startsWith("https://")) {
+                            if (tab?.isSecure == true) {
                                 Icon(
                                     imageVector = HeliosIcons.Lock,
-                                    contentDescription = "Secure",
-                                    tint = HeliosTextSecondary,
+                                    contentDescription = "Secure connection",
+                                    tint = HeliosShieldGreen,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            } else if (tab != null && !tab.isStartPage) {
+                                // Plain HTTP should not normally survive the HTTPS upgrade setting.
+                                Icon(
+                                    imageVector = HeliosIcons.Sparkle,
+                                    contentDescription = "Not secure",
+                                    tint = HeliosShieldOrange,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -221,7 +249,7 @@ fun AddressBar(
                                 text = displayHost,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = if (currentTab.url == "helios://start") HeliosTextTertiary else HeliosTextPrimary,
+                                color = if (tab?.isStartPage != false) HeliosTextTertiary else HeliosTextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -231,14 +259,33 @@ fun AddressBar(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // Reload or close editing button
+                // Bookmark toggle, only meaningful once a real page is loaded.
+                if (tab != null && !tab.isStartPage) {
+                    IconButton(
+                        onClick = { onIntent(BrowserIntent.ToggleBookmark) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isBookmarked) {
+                                HeliosGlyphs.BookmarkFilled
+                            } else {
+                                HeliosGlyphs.Bookmark
+                            },
+                            contentDescription = if (isBookmarked) "Remove bookmark" else "Bookmark",
+                            tint = if (isBookmarked) HeliosBlue else HeliosTextSecondary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+
+                // Reload, or cancel out of editing.
                 IconButton(
                     onClick = {
                         if (isEditing) {
                             isEditing = false
                             focusManager.clearFocus()
                         } else {
-                            onReload()
+                            onIntent(BrowserIntent.Reload)
                         }
                     },
                     modifier = Modifier.size(34.dp)
@@ -251,12 +298,12 @@ fun AddressBar(
                     )
                 }
 
-                // Tab Switcher button with tab counter badge
+                // Tab switcher with count badge
                 Box(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable(onClick = onOpenTabs),
+                        .clickable { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Tabs)) },
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
@@ -267,7 +314,7 @@ fun AddressBar(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = tabsCount.coerceAtLeast(1).toString(),
+                            text = tabCount.coerceAtLeast(1).toString(),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = HeliosTextPrimary
@@ -275,9 +322,9 @@ fun AddressBar(
                     }
                 }
 
-                // Menu button
+                // Menu
                 IconButton(
-                    onClick = onOpenMenu,
+                    onClick = { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Menu)) },
                     modifier = Modifier.size(34.dp)
                 ) {
                     Icon(
@@ -291,3 +338,4 @@ fun AddressBar(
         }
     }
 }
+

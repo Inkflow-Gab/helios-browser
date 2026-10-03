@@ -6,4 +6,11 @@
     <color name="helios_surface">#1C1C1E</color>
     <color name="helios_surface_glass">#D92C2C2E</color>
     <color name="helios_on_surface">#FFFFFF</color>
+
+    <!-- Warm half of the brand ramp. The icon uses exactly these three values so the launcher mark
+         and the in-app Radiance glyph stay the same colour. -->
+    <color name="helios_sun">#FFC94D</color>
+    <color name="helios_sun_light">#FFD166</color>
+    <color name="helios_sun_pale">#FFF3D6</color>
+    <color name="helios_deep_space">#0A0E18</color>
 </resources>

@@ -14,3 +14,15 @@
 .cxx
 local.properties
 app/build
+
+# Rust: target/ is tens of gigabytes of intermediates.
+native/helios-adblock/target/
+
+# The compiled adblock libraries. These are build outputs of `cargo ndk`, not sources: they are
+# rebuilt by the `adblock-engine` job in .github/workflows/build.yml and handed to Gradle through
+# the `helios-jniLibs` artifact. Committing them would add ~20MB of binaries to every clone and let
+# a stale .so from an older commit into a newer APK.
+app/src/jniLibs/
+
+# Never commit a built APK from the repo root.
+Helios-Browser-*.apk

@@ -10,10 +10,112 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  adblock-engine:
+    name: Build native adblock engine
+    runs-on: ubuntu-latest
+
+    # The Rust library is a separate job so its long cold compile, and its failure, are reported
+    # separately from Gradle's. `build` needs it, so a red engine build blocks the APK rather than
+    # silently shipping one with no ad blocking.
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Pinned to match native/helios-adblock/rust-toolchain.toml. The crate's file is the source of
+      # truth once cargo runs inside it; this keeps the *installed* toolchain honest for the
+      # `cargo install cargo-ndk` step that runs before any crate directory is entered.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+
+      # The NDK is not used to build anything directly. cargo-ndk needs it to supply the linker and
+      # the sysroot for each Android target.
+      #
+      # Pinned by full revision rather than the "r27c" alias: the alias is a marketing name that
+      # has moved between NDK releases, and 27.3.13750724 is the revision it refers to.
+      - name: Setup Android NDK
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: 27.3.13750724
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            native/helios-adblock/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('native/helios-adblock/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build libhelios_adblock.so for every ABI
+        working-directory: native/helios-adblock
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        # x86 and x86_64 are built so the APK runs on emulators; arm64 is what real phones use.
+        # armeabi-v7a is kept for old 32-bit devices.
+        #
+        # `-o` takes an absolute or workspace-relative output directory and lays the libraries out
+        # as <dir>/<abi>/lib*.so, which is exactly the layout AGP picks up from app/src/jniLibs.
+        # No Gradle native configuration is needed for that.
+        run: |
+          cargo ndk \
+            -t arm64-v8a \
+            -t armeabi-v7a \
+            -t x86_64 \
+            -o "$GITHUB_WORKSPACE/app/src/jniLibs" \
+            build --release
+          find "$GITHUB_WORKSPACE/app/src/jniLibs" -name '*.so' -exec ls -lh {} +
+
+      # Printed rather than captured as an output: nothing downstream consumes it, and a checksum
+      # in the log is enough to tell two CI builds of the same commit apart.
+      - name: Record what was built
+        working-directory: app/src/jniLibs
+        run: sha256sum */*.so
+
+      - name: Upload native libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-jniLibs
+          path: app/src/jniLibs/
+          retention-days: 7
+          if-no-files-found: error
+
+  rust-tests:
+    name: Test adblock-rust integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+
+      # These cover the JNI layer's own logic: $third-party scoping, @@ exceptions, $domain=,
+      # cosmetic selectors, generic hiding and the serialise round trip. They are the only tests
+      # that exercise the blocking rules, since AdBlockEngineTest cannot call into the library.
+      - name: Run cargo test
+        working-directory: native/helios-adblock
+        run: cargo test --release
+
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
+    needs: [ adblock-engine, rust-tests ]
 
     steps:
       - name: Checkout Source Code
@@ -28,11 +130,38 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Download native libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: helios-jniLibs
+          path: app/src/jniLibs
+
       - name: Make Gradlew Executable
         run: chmod +x gradlew
 
+      # A build with no `.so` still compiles and still ships — Helios falls back to a small
+      # compiled-in host list — but it is not what was asked for, so this fails loudly instead.
+      - name: Verify native libraries are present
+        run: |
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            test -f "app/src/jniLibs/$abi/libhelios_adblock.so" \
+              || { echo "missing libhelios_adblock.so for $abi"; exit 1; }
+          done
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unit-Test-Reports
+          path: app/build/reports/tests/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

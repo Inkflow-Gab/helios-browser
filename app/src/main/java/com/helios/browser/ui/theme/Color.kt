@@ -24,3 +24,17 @@ val HeliosPrivateBackground = Color(0xFF0A0814)
 val HeliosPrivateSurface = Color(0xFF151028)
 val HeliosPrivateAccent = Color(0xFFBF5AF2)
 val HeliosPrivateGlass = Color(0xCC181230)
+
+/** Positive/accent green reused by shield stats and success states. */
+val HeliosGreen = Color(0xFF30D158)
+
+/*
+ * Brand ramp for the radiance mark.
+ *
+ * These are the same three values baked into the launcher icon drawables
+ * (`ic_launcher_foreground.xml` and friends), so the icon on the home screen and the sun drawn on
+ * the splash screen are the same colour. If one is ever changed, change the other.
+ */
+val HeliosSun = Color(0xFFFFC94D)
+val HeliosSunLight = Color(0xFFFFD166)
+val HeliosSunPale = Color(0xFFFFF3D6)

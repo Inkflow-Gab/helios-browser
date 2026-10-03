@@ -1,7 +1,15 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Cold-start window background. Matches the icon's OLED-black plate and the Compose splash so
+         there is no white flash between the launcher and the first frame. -->
     <style name="Theme.Helios" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">@color/helios_background</item>
+        <!-- Stop the system drawing a translucent scrim behind the gesture pill, which would show
+             up as a grey band over the OLED black background. -->
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
     </style>
 </resources>

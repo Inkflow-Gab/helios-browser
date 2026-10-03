@@ -1,5 +1,10 @@
-package com.helios.browser.data
+package com.helios.browser.domain.model
 
+/**
+ * Search providers offered in the omnibox and in first-run setup.
+ *
+ * [searchUrl] must contain a single `%s` placeholder for the encoded query.
+ */
 enum class SearchEngine(
     val title: String,
     val searchUrl: String,
@@ -26,14 +31,7 @@ enum class SearchEngine(
         homeUrl = "https://www.startpage.com"
     );
 
-    fun buildQueryUrl(query: String): String {
-        val trimmed = query.trim()
-        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            trimmed
-        } else if (trimmed.contains(".") && !trimmed.contains(" ")) {
-            "https://$trimmed"
-        } else {
-            String.format(searchUrl, java.net.URLEncoder.encode(trimmed, "UTF-8"))
-        }
-    }
+    /** Builds a search URL for [query] with the query percent-encoded. */
+    fun searchUrlFor(query: String): String =
+        String.format(searchUrl, java.net.URLEncoder.encode(query, "UTF-8"))
 }

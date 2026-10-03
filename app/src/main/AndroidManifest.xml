@@ -4,15 +4,65 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Only needed to write into the public Downloads folder on API 26-28.
+         API 29+ uses scoped storage and needs no storage permission at all. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- DownloadManager posts a notification on our behalf from API 33. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Lets Android 10+ keep the default browser if the user chooses Helios as their handler.
+         Harmless without it, but without it the system silently ignores the default-browser prompt. -->
+    <uses-permission android:name="android.permission.ROLE_BROWSER" />
+
+    <!-- Installed launcher, not a real permission. Declares that a camera app exists so WebView can
+         offer a hardware camera source when a site asks for one on API 30+. -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location"
+        android:required="false" />
+
+    <!-- Declared so WebView can be granted hardware permissions when a site asks.
+         Each one is still requested at runtime before it is ever granted. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Required on API 30+ so non-web links (mailto:, tel:, intent:, market:, custom app
+         schemes) can be resolved to an installed app instead of failing silently. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+
     <application
-        android:allowBackup="true"
+        android:name=".HeliosApplication"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.Helios"
         android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"

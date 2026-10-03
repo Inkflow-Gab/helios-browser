@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
 }
 
 android {
@@ -12,8 +14,8 @@ android {
         applicationId = "com.helios.browser"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0-beta"
+        versionCode = 2
+        versionName = "0.2.0-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -42,18 +44,44 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig is off by default from AGP 8; the About sheet reports the real version name.
+        buildConfig = true
     }
+
+    // Deliberately no `ndk { abiFilters }` and no `externalNativeBuild`.
+    //
+    // libhelios_adblock.so is cross-compiled by `cargo ndk` in the `adblock-engine` CI job and
+    // dropped into app/src/jniLibs/<abi>/, which AGP packages automatically. That keeps the Rust
+    // toolchain out of Gradle entirely: `./gradlew assembleDebug` needs no NDK, no CMake and no
+    // cargo, and just packages whatever libraries are present. Building the library is a separate,
+    // explicit step rather than something Gradle triggers implicitly.
+    //
+    // When the directory is absent — a local build, or someone who skips the Rust step — the app
+    // still compiles and ships. `NativeAdBlock.isAvailable` is then false and blocking falls back
+    // to the small built-in host list. That is a real limitation rather than a crash, and the
+    // shields sheet says so in words instead of claiming protection it does not have.
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    // Assets are left to aapt's default compression. The bundled lists are already gzipped, so
+    // deflating them again buys very little, and letting it happen keeps this file free of a
+    // `noCompress` exception that would have to be remembered if the format ever changes.
+}
+
+ksp {
+    // Room writes the generated schema JSON here; commit it so migrations can be diffed.
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
     implementation("androidx.activity:activity-compose:1.9.0")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
@@ -62,12 +90,30 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // Window size classes drive the adaptive layout (columns, nav rail, omnibox placement).
+    implementation("androidx.compose.material3:material3-window-size-class:1.2.1")
     implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
+    implementation("androidx.compose.animation:animation")
 
-    // AndroidX WebKit for hardware-accelerated Chromium WebView & SafeBrowsing
+    // AndroidX WebKit: hardware-accelerated Chromium WebView, Safe Browsing
     implementation("androidx.webkit:webkit:1.11.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Hilt
+    implementation("com.google.dagger:hilt-android:2.52")
+    ksp("com.google.dagger:hilt-android-compiler:2.52")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // Room: bookmarks + history
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+
+    // DataStore: app settings + session snapshot
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }

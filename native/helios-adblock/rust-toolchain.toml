@@ -1,0 +1,7 @@
+[toolchain]
+# adblock-rust is on edition 2024 (needs Rust 1.85+) and pins 1.98 upstream. Matching it avoids
+# surprises from compiling the dependency with a different compiler than it was written against.
+#
+# This file is the single source of truth for the Rust version. CI installs "whatever rust-toolchain
+# .toml asks for" rather than pinning a second number in the workflow, so the two cannot drift.
+channel = "1.98.0"

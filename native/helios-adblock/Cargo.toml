@@ -1,0 +1,37 @@
+[package]
+name = "helios-adblock"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MPL-2.0"
+publish = false
+description = "JNI shim around adblock-rust, the engine that powers Brave's native adblocker"
+
+[lib]
+name = "helios_adblock"
+# cdylib is what produces libhelios_adblock.so; rlib keeps `cargo test` able to link the
+# unit tests below against the same code.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# `default-features = false` drops `single-thread`, which strips `Send`/`Sync` off `Engine`.
+# `shouldInterceptRequest` arrives on several WebView threads at once, so the engine has to be
+# shareable or this would be a data race the moment two tabs load at the same time.
+#
+# `debug-info` is deliberately NOT enabled: it retains the raw text of every matched rule for
+# reporting, which costs real memory for a feature Helios does not surface.
+adblock = { version = "0.13.3", default-features = false, features = [
+    "embedded-domain-resolver",
+    "full-regex-handling",
+] }
+jni = "0.21"
+
+# `panic = "abort"` is intentionally not set. JNI functions are called across a C boundary, where
+# a Rust panic crossing back is undefined behaviour, and abort would take the whole browser down.
+# Instead every entry point wraps its body in `catch_unwind` and fails open — a bug in the blocker
+# degrades to "ads get through", which is survivable; a SIGABRT is not.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

@@ -1,6 +1,7 @@
 package com.helios.browser.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,9 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -27,24 +29,36 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.helios.browser.domain.model.AppSettings
+import com.helios.browser.domain.model.BrowserTab
+import com.helios.browser.domain.model.SearchEngine
+import com.helios.browser.ui.browser.BrowserIntent
+import com.helios.browser.ui.browser.BrowserOverlay
+import com.helios.browser.ui.icons.HeliosGlyphs
 import com.helios.browser.ui.icons.HeliosIcons
 import com.helios.browser.ui.theme.HeliosBlue
 import com.helios.browser.ui.theme.HeliosDarkCard
 import com.helios.browser.ui.theme.HeliosDarkSurface
+import com.helios.browser.ui.theme.HeliosPrivateAccent
+import com.helios.browser.ui.theme.HeliosShieldGreen
 import com.helios.browser.ui.theme.HeliosTextPrimary
 import com.helios.browser.ui.theme.HeliosTextSecondary
 
+/**
+ * Menu sheet: tab actions, privacy mode, library entry points, and the search engine picker.
+ *
+ * Actions are emitted as intents, so nothing here has to know whether a page is loaded.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserMenuSheet(
-    isDesktopMode: Boolean,
-    onToggleDesktop: () -> Unit,
-    onShare: () -> Unit,
-    onNewTab: () -> Unit,
-    onNewPrivateTab: () -> Unit,
+    tab: BrowserTab?,
+    settings: AppSettings,
+    onIntent: (BrowserIntent) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val hasRealPage = tab != null && !tab.isStartPage
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -64,104 +78,187 @@ fun BrowserMenuSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
         ) {
-            Text(
-                text = "Helios Options",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = HeliosTextPrimary,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Action Items
-            MenuItemRow(
-                title = "New Tab",
-                icon = HeliosIcons.Plus,
-                onClick = {
-                    onNewTab()
-                    onDismiss()
-                }
-            )
-
-            MenuItemRow(
-                title = "New Private Tab",
-                icon = HeliosIcons.Incognito,
-                onClick = {
-                    onNewPrivateTab()
-                    onDismiss()
-                }
-            )
-
-            MenuItemRow(
-                title = if (isDesktopMode) "Request Mobile Site" else "Request Desktop Site",
-                icon = HeliosIcons.Desktop,
-                onClick = {
-                    onToggleDesktop()
-                    onDismiss()
-                }
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // About Dev Footer
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(HeliosDarkCard)
-                    .padding(14.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "About Helios Browser",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = HeliosTextPrimary
+            if (hasRealPage) {
+                Text(
+                    text = tab.title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HeliosTextPrimary,
+                    maxLines = 2
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (tab.isSecure) HeliosIcons.Lock else HeliosIcons.Sparkle,
+                        contentDescription = null,
+                        tint = if (tab.isSecure) HeliosShieldGreen else HeliosTextSecondary,
+                        modifier = Modifier.size(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = "Crafted by 17y/o developer using Android phone & GitHub Actions CI/CD. Built for privacy, speed, and clean design.",
-                        fontSize = 11.sp,
+                        text = tab.displayHost,
+                        fontSize = 12.sp,
                         color = HeliosTextSecondary,
-                        lineHeight = 15.sp
+                        maxLines = 1
                     )
                 }
+                Spacer(modifier = Modifier.height(18.dp))
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            MenuAction(
+                icon = HeliosIcons.Plus,
+                title = "New tab",
+                subtitle = "Open another page in this browsing mode",
+                onClick = { onIntent(BrowserIntent.NewTab) }
+            )
+
+            MenuAction(
+                icon = HeliosIcons.Incognito,
+                title = "New private tab",
+                subtitle = "Nothing is saved, cookies are blocked",
+                tint = HeliosPrivateAccent,
+                onClick = { onIntent(BrowserIntent.NewPrivateTab) }
+            )
+
+            MenuAction(
+                icon = HeliosIcons.Tabs,
+                title = "Tab switcher",
+                onClick = { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Tabs)) }
+            )
+
+            MenuAction(
+                icon = HeliosGlyphs.Bookmark,
+                title = "Bookmarks",
+                onClick = { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Bookmarks)) }
+            )
+
+            MenuAction(
+                icon = HeliosGlyphs.History,
+                title = "History",
+                onClick = { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.History)) }
+            )
+
+            if (hasRealPage) {
+                MenuAction(
+                    icon = HeliosGlyphs.Globe,
+                    title = "Copy link",
+                    subtitle = tab.url,
+                    onClick = { onIntent(BrowserIntent.CopyLink(tab.url)) }
+                )
+
+                MenuAction(
+                    icon = HeliosIcons.Sparkle,
+                    title = "Share page",
+                    subtitle = "Send the title and link to another app",
+                    onClick = { onIntent(BrowserIntent.SharePage(tab.url, tab.title)) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Text(
+                text = "Search engine",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HeliosTextSecondary,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+
+            SearchEngine.entries.forEach { engine ->
+                val isSelected = engine == settings.searchEngine
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (isSelected) HeliosBlue.copy(alpha = 0.14f) else HeliosDarkCard)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) HeliosBlue else Color.White.copy(alpha = 0.06f),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .clickable { onIntent(BrowserIntent.SetSearchEngine(engine)) }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = engine.title,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) HeliosBlue else HeliosTextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isSelected) {
+                        Icon(
+                            imageVector = HeliosGlyphs.Check,
+                            contentDescription = "Selected",
+                            tint = HeliosBlue,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun MenuItemRow(
-    title: String,
+private fun MenuAction(
     icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    tint: Color = HeliosTextPrimary,
+    enabled: Boolean = true,
+    hidden: Boolean = false,
     onClick: () -> Unit
 ) {
+    if (hidden) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(vertical = 3.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(HeliosDarkCard)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = title,
-            tint = HeliosBlue,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(14.dp))
-        Text(
-            text = title,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            color = HeliosTextPrimary
-        )
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(Color.White.copy(alpha = 0.05f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = HeliosTextPrimary
+            )
+            if (subtitle != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    color = HeliosTextSecondary,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }

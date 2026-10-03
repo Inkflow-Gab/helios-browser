@@ -1,15 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Helios launcher foreground: a radiating sun.
+
+    Eight tapered rays on a 45 degree step around a warm core. Everything is kept inside a 66dp
+    diameter circle centred on (54,54) because the launcher masks the outer 18dp of a 108dp
+    adaptive icon on every shape (circle, squircle, rounded square).
+
+    This is the still variant, used below API 26 and as the crash-safe fallback. The animated
+    variant lives in ic_launcher_foreground_animated.xml and shares this geometry.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Warm halo behind the core, so the disc does not read as a flat sticker. -->
     <path
-        android:fillColor="#0A84FF"
-        android:pathData="M54,18 L76,32 L76,64 L54,88 L32,64 L32,32 Z" />
+        android:pathData="M54,42 A12,12 0 1,1 53.99,42 Z"
+        android:fillColor="#33FFC94D" />
+
+    <!-- Rays. Long/short alternating so the rotation reads as motion, not as a plain circle. -->
+    <group
+        android:name="ray"
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="0">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="45">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="90">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="135">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="180">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="225">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="270">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="315">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+    </group>
+
+    <!-- Core. -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,26 L68,36 L68,60 L54,78 L40,60 L40,36 Z" />
+        android:pathData="M54,43 A11,11 0 1,1 53.99,43 Z"
+        android:fillColor="#FFC94D" />
     <path
-        android:fillColor="#0A84FF"
-        android:pathData="M54,34 L62,42 L62,56 L54,68 L46,56 L46,42 Z" />
+        android:pathData="M54,47 A7,7 0 1,1 53.99,47 Z"
+        android:fillColor="#FFF3D6" />
 </vector>

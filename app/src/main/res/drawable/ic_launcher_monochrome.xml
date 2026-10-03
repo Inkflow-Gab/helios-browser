@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Single-colour silhouette for Android 13 themed icons. The launcher supplies the tint, so every
+    fill here must be opaque white: any baked-in colour would survive the tinting and muddy it.
+    The alternating ray lengths are preserved because they are what makes the rotation legible.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group android:pivotX="54" android:pivotY="54" android:rotation="0">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="45">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="90">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="135">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="180">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="225">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="270">
+        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="315">
+        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFFFFFFF" />
+    </group>
+
+    <path
+        android:pathData="M54,43 A11,11 0 1,1 53.99,43 Z"
+        android:fillColor="#FFFFFFFF" />
+</vector>
