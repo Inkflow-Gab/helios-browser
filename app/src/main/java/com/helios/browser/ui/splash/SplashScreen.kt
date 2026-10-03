@@ -2,12 +2,7 @@ package com.helios.browser.ui.splash
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -79,19 +74,10 @@ fun SplashScreen(
         entrance.animateTo(1f, tween(durationMillis = 650, easing = LinearOutSlowInEasing))
     }
 
-    // One slow loop for the halo brightness. The previous version animated two 320dp rings
-    // expanding and fading, which meant a large alpha-blended shape was being scaled on the CPU
-    // every frame for the whole time the splash was up — the single most expensive thing on the
-    // screen, and it looked like a generic loading spinner besides.
-    val breath = rememberInfiniteTransition(label = "splash-breath").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breath"
-    )
+    // One clock for the whole splash. The mark, the counter ring and the halo all read from this
+    // single angle, because each `rememberInfiniteTransition` is its own ticker with its own frame
+    // callbacks — three of them meant three sets of per-frame work for one screen.
+    val spin = rememberSteadySpin()
 
     AnimatedVisibility(
         visible = visible,
@@ -107,22 +93,23 @@ fun SplashScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(contentAlignment = Alignment.Center) {
-                    // A single hairline ring, breathing in opacity only. Opacity is a cheap
-                    // compositor property; scale on a large alpha shape was not.
+                    // A hairline ring, static. It was previously two 320dp rings expanding and
+                    // fading: a large alpha-blended shape being scaled on the CPU every frame for
+                    // the whole time the splash was up, and it read as a generic loading spinner.
                     HeliosOrbitRing(
-                        modifier = Modifier
-                            .size(196.dp)
-                            .alpha(0.10f + breath.value * 0.14f),
-                        color = HeliosSun
+                        modifier = Modifier.size(200.dp),
+                        color = HeliosSun.copy(alpha = 0.16f)
                     )
-                    // Counter-rotating against the mark, which is what makes the two read as
-                    // separate planes rather than one spinning sticker.
+                    // Counter-rotating off the same angle as the mark, so the two read as separate
+                    // planes rather than one spinning sticker, at the cost of no extra ticker.
                     HeliosCounterRing(
-                        modifier = Modifier.size(150.dp),
-                        color = HeliosSun.copy(alpha = 0.5f),
+                        spinDegrees = spin,
+                        modifier = Modifier.size(152.dp),
+                        color = HeliosSun.copy(alpha = 0.42f),
                         strokeWidth = 1.dp
                     )
                     HeliosSunMark(
+                        spinDegrees = spin,
                         modifier = Modifier
                             .size(148.dp)
                             .scale(0.78f + entrance.value * 0.22f)

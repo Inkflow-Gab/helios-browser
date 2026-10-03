@@ -197,11 +197,20 @@ fun StartPageView(
 }
 
 /**
- * The animated sun mark above the wordmark.
+ * The sun mark above the wordmark.
  *
- * Reuses the splash's mark rather than drawing a second one, so the icon on the home screen, the
- * splash and the start page are visibly the same thing. The orbit ring is decorative and drawn at
- * low alpha behind it.
+ * Reuses the splash's mark so the home-screen icon, the splash and the start page are visibly the
+ * same thing.
+ *
+ * ## It does not spin
+ * This is a deliberate reversal. The mark used to turn continuously here, which meant an animation
+ * clock and a layer invalidation every frame for as long as the start page was open — on a page the
+ * user may sit on for minutes. That is the most likely reason the animation was reported as
+ * lagging: two continuous clocks (the mark and the counter ring) on the screen they were most likely
+ * looking at.
+ *
+ * A still mark costs nothing, and a front page that never stops moving is a distraction anyway. The
+ * splash is where motion belongs, because it is on screen for under a second.
  */
 @Composable
 private fun HeliosWordmark() {
@@ -211,19 +220,20 @@ private fun HeliosWordmark() {
     ) {
         Box(contentAlignment = Alignment.Center) {
             HeliosOrbitRing(
-                modifier = Modifier.size(104.dp),
-                color = HeliosSun.copy(alpha = 0.14f)
+                modifier = Modifier.size(108.dp),
+                color = HeliosSun.copy(alpha = 0.13f)
             )
-            // Turns against the mark, which is what makes the two read as separate planes rather
-            // than one spinning sticker.
             HeliosCounterRing(
-                modifier = Modifier.size(92.dp),
-                color = HeliosSun.copy(alpha = 0.38f),
+                // A fixed angle rather than an animated one: the ring is a design element here, not
+                // a second moving part.
+                spinDegrees = 24f,
+                modifier = Modifier.size(94.dp),
+                color = HeliosSun.copy(alpha = 0.34f),
                 strokeWidth = 1.dp
             )
-            HeliosSunMark(modifier = Modifier.size(76.dp))
+            HeliosSunMark(modifier = Modifier.size(76.dp), animate = false)
         }
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = "Helios",
             fontSize = 26.sp,
@@ -231,7 +241,7 @@ private fun HeliosWordmark() {
             color = HeliosTextPrimary,
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = "A browser that minds its own business",
             fontSize = 12.sp,

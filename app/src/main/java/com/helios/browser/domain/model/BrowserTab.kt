@@ -36,8 +36,14 @@ data class BrowserTab(
         /** Sentinel URL meaning "no page loaded". Never pass this to a real WebView. */
         const val START_PAGE_URL = "helios://start"
 
-        /** Title shown while the start page is displayed. */
-        const val DEFAULT_TITLE = "Start Page"
+        /**
+         * Title shown while the start page is displayed.
+         *
+         * The browser's own name, not "Start Page". A fresh tab's title shows up in the omnibox and on
+         * its card in the switcher, and calling it "Start Page" there describes an implementation
+         * detail to the user instead of naming the thing they are looking at.
+         */
+        const val DEFAULT_TITLE = "Helios"
 
         fun start(
             id: String = UUID.randomUUID().toString(),
