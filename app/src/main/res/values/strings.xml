@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Helios</string>
+    <string name="welcome_title">Hello, welcome to Helios Browser</string>
+    <string name="welcome_subtitle">This is just beta so dont expect too much and made by 17y/o with only using phone and github</string>
+    <string name="search_hint">Search or enter web address</string>
+    <string name="shields_title">Helios Shields</string>
+    <string name="ads_blocked">Ads &amp; Trackers Blocked</string>
+    <string name="data_saved">Est. Data Saved</string>
+    <string name="time_saved">Est. Time Saved</string>
+    <string name="new_tab">New Tab</string>
+    <string name="private_tab">Private Tab</string>
+</resources>

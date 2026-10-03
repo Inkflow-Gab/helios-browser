@@ -1,0 +1,9 @@
+<resources>
+    <color name="helios_primary">#0A84FF</color>
+    <color name="helios_primary_dark">#0066CC</color>
+    <color name="helios_accent">#5E5CE6</color>
+    <color name="helios_background">#000000</color>
+    <color name="helios_surface">#1C1C1E</color>
+    <color name="helios_surface_glass">#D92C2C2E</color>
+    <color name="helios_on_surface">#FFFFFF</color>
+</resources>
