@@ -3,6 +3,8 @@ package com.helios.browser.engine
 import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
+import com.helios.browser.domain.model.BlockingPreset
+import com.helios.browser.domain.model.FilterList
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,17 +45,18 @@ enum class BlockListSource {
  * ## Startup order, and why
  * 1. **Cache.** [NativeAdBlock.deserialize] on the file a previous run wrote. Restoring a compiled
  *    engine is a memory copy; rebuilding one is seconds of parsing. This is the single biggest
- *    reason cold start does not stall.
- * 2. **Bundled.** The APK ships EasyList and EasyPrivacy gzipped in `assets/blocklists`. Parsing
- *    them takes a few seconds, but they are always present, so blocking is functional offline and
- *    on first run with no network at all.
+ *    reason cold start does not stall. Bounded by [MAX_CACHE_BYTES] — see [restoreFromCache].
+ * 2. **Bundled.** The APK ships the lists for [preset] gzipped in `assets/blocklists`. Parsing
+ *    them takes a few seconds, but they are always present, so blocking is functional offline and on
+ *    first run with no network at all.
  * 3. **Remote.** A refresh afterwards pulls the publishers' current versions. Failure here changes
  *    nothing about the first two steps, which is the point: the network is an optimisation, never a
  *    dependency.
  *
- * ## Why the cache is safe to trust
- * The serialised engine embeds a checksum, and adblock-rust refuses a file written by a different
- * crate version. A failed restore therefore costs one wasted parse, never a wrong engine.
+ * ## The cache is per-preset
+ * A serialised engine is the compiled form of one specific set of rules. Restoring a cache built
+ * from EasyList after the user has switched to uBlock would silently keep applying the old rules, so
+ * [setPreset] deletes the cache whenever the preset actually changes.
  *
  * ## Threading
  * [initialize] is idempotent and guarded by a coroutine [Mutex], so the application class and the
@@ -70,6 +73,16 @@ class BlockListRepository @Inject constructor(
     private val _status = MutableStateFlow(BlockingEngineSnapshot())
 
     override val status: StateFlow<BlockingEngineSnapshot> = _status.asStateFlow()
+
+    /**
+     * The preset the engine is currently built from.
+     *
+     * Kept here rather than read from [com.helios.browser.data.repository.SettingsRepository] on
+     * demand because the repository must be able to act on a preset change the moment it is told,
+     * not the next time a caller happens to ask.
+     */
+    @Volatile
+    private var preset: BlockingPreset = BlockingPreset.DEFAULT
 
     private var source: BlockListSource = BlockListSource.NONE
         private set
@@ -90,12 +103,49 @@ class BlockListRepository @Inject constructor(
             isReady = NativeAdBlock.isReady,
             isRefreshing = isRefreshing,
             source = source,
+            preset = preset,
             cacheSizeBytes = cacheFile.takeIf { it.exists() }?.length() ?: 0L
         )
     }
 
     /**
-     * Loads an engine, reusing the cache when it is still valid.
+     * Switches the filter preset and rebuilds the engine from the new lists.
+     *
+     * Rebuilds rather than waiting for the next launch, because a settings toggle that does not take
+     * effect until you restart the browser reads as broken. The rebuild is the same few seconds of
+     * parse the first launch pays, and it happens on IO.
+     *
+     * The cache is deleted first, because it is the compiled form of the *old* rules and would
+     * otherwise be restored over the top.
+     */
+    suspend fun setPreset(next: BlockingPreset) = withContext(Dispatchers.IO) {
+        if (next == preset) return@withContext
+        startLock.withLock {
+            Log.i(TAG, "Switching blocking preset ${preset.name} -> ${next.name}")
+            preset = next
+            runCatching { cacheFile.delete() }
+            runCatching { cacheFile.temp().delete() }
+
+            // Release the old engine before parsing the new one, so peak memory is the larger of the
+            // two rather than their sum. A failed rebuild then leaves no engine, which the Kotlin
+            // fallback covers, rather than an engine built from rules the user has moved away from.
+            NativeAdBlock.release()
+            source = BlockListSource.NONE
+            publish()
+
+            val loaded = loadBundled()
+            if (!loaded) {
+                Log.e(TAG, "Could not build an engine for ${next.name}")
+            } else {
+                writeCache()
+            }
+            publish()
+            loaded
+        }
+    }
+
+    /**
+     * Loads an engine for the current preset, reusing the cache when it is still valid.
      *
      * Safe to call from anywhere and as often as you like; only the first caller does work. Returns
      * true if an engine is loaded when it finishes.
@@ -123,10 +173,11 @@ class BlockListRepository @Inject constructor(
     }
 
     /**
-     * Pulls the publishers' current lists and rebuilds the engine, then rewrites the cache.
+     * Pulls the publishers' current lists for every list in the preset and rebuilds the engine.
      *
-     * Network and parse failures are swallowed on purpose. The engine already in use came from the
-     * cache or the APK, and replacing it with nothing would make things strictly worse.
+     * Partial results are refused: a preset means a specific set of lists, and quietly building an
+     * engine from two of its six is worse than keeping the one already in use. Network and parse
+     * failures are swallowed on purpose — the engine already in use came from the cache or the APK.
      *
      * @return true if the engine was rebuilt from fresh lists.
      */
@@ -146,16 +197,22 @@ class BlockListRepository @Inject constructor(
      * exactly that.
      */
     private suspend fun refreshLocked(): Boolean = withContext(Dispatchers.IO) {
-        val lists = REMOTE_SOURCES.mapNotNull { url -> runCatching { download(url) }.getOrNull() }
-        val easyList = lists.firstOrNull { it.first == EASY_LIST_URL }?.second
-        val easyPrivacy = lists.firstOrNull { it.first == EASY_PRIVACY_URL }?.second
+        val wanted = preset.lists
+        val downloaded = wanted.mapNotNull { list ->
+            runCatching { list to download(list) }.getOrNull()
+        }.filter { it.second.isNotEmpty() }.toMap()
 
-        if (easyList.isNullOrEmpty() || easyPrivacy.isNullOrEmpty()) {
-            Log.w(TAG, "Filter list refresh incomplete; keeping the current engine")
+        val missing = wanted.filterNot { downloaded.containsKey(it) }
+        if (missing.isNotEmpty()) {
+            Log.w(TAG, "Could not fetch ${missing.map { it.displayName }}; keeping the current engine")
             return@withContext false
         }
 
-        val rebuilt = NativeAdBlock.load(easyList, easyPrivacy)
+        // Merged in one call so the engine is built from all of the preset's lists at once rather
+        // than replacing itself per list.
+        val rebuilt = NativeAdBlock.load(
+            downloaded.values.joinToString("\n") { it }
+        )
         if (!rebuilt) {
             Log.w(TAG, "Engine rebuild from downloaded lists failed; keeping the current engine")
             return@withContext false
@@ -178,20 +235,19 @@ class BlockListRepository @Inject constructor(
      * Restores a cached engine, if there is one this device can afford to load.
      *
      * ## Why there is a size gate here
-     * The serialised engine for EasyList plus EasyPrivacy runs to tens of megabytes. Reading it
-     * costs one `ByteArray` of that size, and handing it to `nativeDeserialize` costs a second copy
-     * inside Rust — so restoring a 40MB cache peaks at roughly 80MB of heap before a single rule is
-     * matched. On a low-RAM phone that is an `OutOfMemoryError` on the launch path, which is exactly
-     * the "it will not open after a few launches" report: the first launch has no cache and works,
-     * and every launch after the cache exists does not.
+     * A serialised engine runs to tens of megabytes. Reading it costs one `ByteArray` of that size,
+     * and handing it to `nativeDeserialize` costs a second copy inside Rust — so restoring a 40MB
+     * cache peaks at roughly 80MB of heap before a single rule is matched. On a low-RAM phone that
+     * is an `OutOfMemoryError` on the launch path, which is exactly the "it will not open after a
+     * few launches" report: the first launch has no cache and works, every launch after does not.
      *
-     * So the cache is treated as an optimisation with a budget, not as the source of truth. Over
-     * [MAX_CACHE_BYTES], or on a device the platform reports as low-RAM, it is skipped entirely and
-     * the engine is rebuilt from the bundled lists. That costs a few seconds of parse and removes
-     * the failure mode, which is the right trade for a browser.
+     * So the cache is an optimisation with a budget, not the source of truth. Over
+     * [MAX_CACHE_BYTES], or on a device the platform reports as low-RAM, it is skipped and the engine
+     * is rebuilt from the bundled lists. That costs a few seconds of parse and removes the failure
+     * mode, which is the right trade for a browser.
      *
-     * An oversized cache is deleted rather than left in place, because the gate is a length check
-     * and a file that is never read would otherwise occupy storage forever.
+     * An oversized cache is deleted rather than left in place: the gate is a length check, so a file
+     * that is never read would otherwise occupy storage forever.
      */
     private fun restoreFromCache(): Boolean {
         val file = cacheFile
@@ -214,12 +270,12 @@ class BlockListRepository @Inject constructor(
             .also { if (it) source = BlockListSource.CACHE }
     }
 
+    /** Parses every list in the current preset out of the APK. */
     private fun loadBundled(): Boolean {
-        val easyList = readBundled(EASY_LIST_ASSET)
-        val easyPrivacy = readBundled(EASY_PRIVACY_ASSET)
-        if (easyList.isEmpty() && easyPrivacy.isEmpty()) return false
+        val texts = preset.lists.map { readBundled(it.assetPath) }
+        if (texts.none { it.isNotEmpty() }) return false
 
-        val loaded = NativeAdBlock.load(easyList, easyPrivacy)
+        val loaded = NativeAdBlock.load(texts.joinToString("\n") { it })
         if (loaded) {
             source = BlockListSource.BUNDLED
             // Seeding the cache here is what makes the *next* start fast. The lists in the APK
@@ -232,9 +288,9 @@ class BlockListRepository @Inject constructor(
     /**
      * Decompresses one bundled list.
      *
-     * Stored gzipped because the raw text is around 3.6MB and aapt will not compress an asset
-     * further. Returning an empty string on failure is intentional: [loadBundled] can work from
-     * either list alone.
+     * Stored gzipped because the raw text runs to megabytes and aapt will not compress an asset
+     * further. Returning an empty string on failure is intentional: the engine can be built from
+     * whichever lists did load, though [refreshLocked] is stricter and refuses a partial fetch.
      */
     private fun readBundled(assetPath: String): String = runCatching {
         context.assets.open(assetPath).use { raw ->
@@ -242,8 +298,8 @@ class BlockListRepository @Inject constructor(
         }
     }.onFailure { Log.w(TAG, "Bundled list $assetPath unreadable", it) }.getOrDefault("")
 
-    private fun download(url: String): Pair<String, String> {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+    private fun download(list: FilterList): String {
+        val connection = (URL(list.remoteUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
@@ -253,22 +309,15 @@ class BlockListRepository @Inject constructor(
         }
         try {
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                Log.w(TAG, "HTTP ${connection.responseCode} from $url")
-                return url to ""
+                Log.w(TAG, "HTTP ${connection.responseCode} from ${list.remoteUrl}")
+                return ""
             }
-            return url to connection.inputStream.bufferedReader().use { it.readText() }
+            return connection.inputStream.bufferedReader().use { it.readText() }
         } finally {
             connection.disconnect()
         }
     }
 
-    /**
-     * Writes the serialised engine next to the app's files, atomically.
-     *
-     * The temp-then-rename matters: a half-written cache file would be rejected on the next start,
-     * and if the process died during the write the failure would look like a corrupt cache rather
-     * than an interrupted one.
-     */
     /**
      * Writes the serialised engine, if it is small enough to be worth restoring later.
      *
@@ -284,7 +333,7 @@ class BlockListRepository @Inject constructor(
             return
         }
         val target = cacheFile
-        val temp = File(target.parentFile, "${target.name}.tmp")
+        val temp = target.temp()
         runCatching {
             target.parentFile?.mkdirs()
             temp.writeBytes(bytes)
@@ -314,6 +363,9 @@ class BlockListRepository @Inject constructor(
     private val cacheFile: File
         get() = File(File(context.filesDir, CACHE_DIR), CACHE_FILE)
 
+    /** The in-progress file [writeCache] writes to before renaming over the real one. */
+    private fun File.temp(): File = File(parentFile, "$name.tmp")
+
     private companion object {
         const val TAG = "BlockListRepository"
         const val CACHE_DIR = "blocklist"
@@ -336,23 +388,10 @@ class BlockListRepository @Inject constructor(
          * process starts fighting for room.
          */
         const val MIN_MEMORY_CLASS_MB = 192
-        const val EASY_LIST_ASSET = "blocklists/easylist.txt.gz"
-        const val EASY_PRIVACY_ASSET = "blocklists/easyprivacy.txt.gz"
+
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 30_000
-
-        /** Some CDNs serve an empty or HTML body to unrecognised clients. */
         const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 Helios/0.2"
-
-        const val EASY_LIST_URL = "https://easylist.to/easylist/easylist.txt"
-        const val EASY_PRIVACY_URL = "https://easylist.to/easylist/easyprivacy.txt"
-
-        /**
-         * The same two lists Brave and uBlock Origin ship by default, in Adblock Plus syntax —
-         * which is the only format the engine reads. Filter lists published in hosts format would
-         * need `ParseOptions.format = FilterFormat::Hosts`; none are configured here.
-         */
-        val REMOTE_SOURCES = listOf(EASY_LIST_URL, EASY_PRIVACY_URL)
     }
 }

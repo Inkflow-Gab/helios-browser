@@ -3,6 +3,7 @@ package com.helios.browser.ui.browser
 import androidx.compose.runtime.Immutable
 import com.helios.browser.core.url.UrlNormalizer
 import com.helios.browser.domain.model.AppSettings
+import com.helios.browser.domain.model.BlockingPreset
 import com.helios.browser.domain.model.Bookmark
 import com.helios.browser.domain.model.BrowserTab
 import com.helios.browser.domain.model.HistoryEntry
@@ -35,6 +36,10 @@ data class DownloadRecord(
  * This is the UI's own value type rather than [com.helios.browser.engine.BlockingEngineSnapshot]
  * because `BrowserState` is a Compose state object: it carries `@Immutable` so recomposition can be
  * skipped, and it is the shape the screens actually read. [toUiState] is the only conversion.
+ *
+ * @param preset what the user chose.
+ * @param activePreset what the running engine actually contains. These differ while a preset switch
+ *   is rebuilding, and the shields sheet has to say which one it is describing.
  */
 @Immutable
 data class BlockingEngineState(
@@ -43,20 +48,32 @@ data class BlockingEngineState(
     val isReady: Boolean = false,
     val isRefreshing: Boolean = false,
     val source: BlockListSource = BlockListSource.NONE,
+    val preset: BlockingPreset = BlockingPreset.DEFAULT,
+    val activePreset: BlockingPreset = BlockingPreset.DEFAULT,
     val cacheSizeBytes: Long = 0L
-)
+) {
+    /**
+     * True when the engine is not currently the lists the user asked for.
+     *
+     * Shown as a "rebuilding" state rather than silently continuing with the old rules.
+     */
+    val isRebuilding: Boolean get() = preset != activePreset
+}
 
 /**
  * Copies the engine's snapshot into the UI's value type.
  *
- * Straight field-for-field today. It exists so a change to either side is a compile error here
- * rather than a silently missing field on a settings screen.
+ * [preset] comes from settings rather than the snapshot: it is the user's choice, while the
+ * snapshot's own field is what has actually been built. Passing the choice in separately is what
+ * lets [BlockingEngineState.isRebuilding] be meaningful.
  */
-fun BlockingEngineSnapshot.toUiState(): BlockingEngineState = BlockingEngineState(
+fun BlockingEngineSnapshot.toUiState(chosen: BlockingPreset): BlockingEngineState = BlockingEngineState(
     isAvailable = isAvailable,
     isReady = isReady,
     isRefreshing = isRefreshing,
     source = source,
+    preset = chosen,
+    activePreset = preset,
     cacheSizeBytes = cacheSizeBytes
 )
 
@@ -134,6 +151,23 @@ sealed interface BrowserIntent {
 
     /** Re-downloads the filter lists and recompiles the adblock engine. */
     data object RefreshBlockLists : BrowserIntent
+
+    /**
+     * Puts a message in front of the user without changing any state.
+     *
+     * Needed for the features that are stubbed rather than absent: the menu offers them, so the
+     * button has to answer with something honest rather than doing nothing. A menu item that
+     * silently swallows a tap is worse than one that says "not yet".
+     */
+    data class ShowMessage(val message: String) : BrowserIntent
+
+    /**
+     * Switches which filter lists the engine is built from.
+     *
+     * Persisted and applied immediately; the rebuild itself runs in the repository, because the
+     * engine is process-wide state the ViewModel does not own.
+     */
+    data class SetBlockingPreset(val preset: BlockingPreset) : BrowserIntent
 
     // WebView callbacks
     data class PageStarted(val url: String, val canGoBack: Boolean, val canGoForward: Boolean) : BrowserIntent

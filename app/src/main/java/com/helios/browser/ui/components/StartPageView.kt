@@ -123,6 +123,12 @@ fun StartPageView(
         }
 
         item {
+            // One line, so the answer to "what is this thing" is on the front page rather than
+            // behind a menu. The detail lives in the menu's recommendations panel.
+            WhyHeliosStrip()
+        }
+
+        item {
             SectionHeader(
                 title = "Search engine",
                 onActionClick = { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Menu)) },

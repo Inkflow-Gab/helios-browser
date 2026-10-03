@@ -1,5 +1,6 @@
 package com.helios.browser.engine
 
+import com.helios.browser.domain.model.BlockingPreset
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -34,13 +35,24 @@ interface BlockingEngineStatus {
     val status: StateFlow<BlockingEngineSnapshot>
 
     /**
-     * Re-downloads the filter lists and rebuilds the engine.
+     * Re-downloads the filter lists for the current preset and rebuilds the engine.
      *
      * Emits into [status] while it runs, so the UI can show progress. Suspends for several seconds
      * and never throws: on failure the engine already in use stays in use. Returns true if the
      * engine was actually rebuilt.
      */
     suspend fun refresh(): Boolean
+
+    /**
+     * Switches the filter preset and rebuilds the engine from the new lists.
+     *
+     * Takes effect immediately rather than at the next launch, because a settings toggle that
+     * requires a restart reads as broken. Clears the on-disk cache first, since a serialised engine
+     * is the compiled form of the old rules.
+     *
+     * Suspends for several seconds. Returns true if the new preset's engine loaded.
+     */
+    suspend fun setPreset(preset: BlockingPreset): Boolean
 }
 
 /**
@@ -67,6 +79,16 @@ data class BlockingEngineSnapshot(
 
     /** Where the loaded lists came from. Useful for telling the user how current they are. */
     val source: BlockListSource = BlockListSource.NONE,
+
+    /**
+     * Which filter lists the loaded engine was built from.
+     *
+     * Reported separately from the settings value because the two can legitimately differ: the
+     * setting is what the user chose, this is what the running engine actually contains. They
+     * diverge while a preset switch is still rebuilding, and during that window the shields sheet
+     * should say so rather than claiming the new lists are active.
+     */
+    val preset: BlockingPreset = BlockingPreset.DEFAULT,
 
     /** Size of the on-disk engine cache, or 0 when there is none. */
     val cacheSizeBytes: Long = 0L

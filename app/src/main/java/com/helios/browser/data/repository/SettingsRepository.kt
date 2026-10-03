@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.helios.browser.di.IoDispatcher
 import com.helios.browser.domain.model.AppSettings
 import com.helios.browser.domain.model.BrowserTab
+import com.helios.browser.domain.model.BlockingPreset
 import com.helios.browser.domain.model.OmniboxPosition
 import com.helios.browser.domain.model.SearchEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -70,6 +71,9 @@ class SettingsRepository @Inject constructor(
             prefs[KEY_DESKTOP_DEFAULT] = next.desktopModeByDefault
             prefs[KEY_SAVE_HISTORY] = next.saveHistoryEnabled
             prefs[KEY_OMNIBOX] = next.omniboxPosition.name
+            // Stored by name rather than ordinal: reordering the enum would otherwise silently
+            // change what an existing install is set to. fromName falls back to the default.
+            prefs[KEY_BLOCKING_PRESET] = next.blockingPreset.name
         }
     }
 
@@ -152,7 +156,8 @@ class SettingsRepository @Inject constructor(
             safeBrowsingEnabled = this[KEY_SAFE_BROWSING] ?: defaults.safeBrowsingEnabled,
             desktopModeByDefault = this[KEY_DESKTOP_DEFAULT] ?: defaults.desktopModeByDefault,
             saveHistoryEnabled = this[KEY_SAVE_HISTORY] ?: defaults.saveHistoryEnabled,
-            omniboxPosition = OmniboxPosition.fromName(this[KEY_OMNIBOX])
+            omniboxPosition = OmniboxPosition.fromName(this[KEY_OMNIBOX]),
+            blockingPreset = BlockingPreset.fromName(this[KEY_BLOCKING_PRESET])
         )
     }
 
@@ -169,6 +174,7 @@ class SettingsRepository @Inject constructor(
         private val KEY_DESKTOP_DEFAULT = booleanPreferencesKey("desktop_default")
         private val KEY_SAVE_HISTORY = booleanPreferencesKey("save_history")
         private val KEY_OMNIBOX = stringPreferencesKey("omnibox_position")
+        private val KEY_BLOCKING_PRESET = stringPreferencesKey("blocking_preset")
         private val KEY_SESSION = stringPreferencesKey("session")
 
         private const val FIELD_TABS = "tabs"

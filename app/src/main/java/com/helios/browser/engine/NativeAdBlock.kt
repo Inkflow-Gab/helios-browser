@@ -110,14 +110,20 @@ object NativeAdBlock {
         if (!isAvailable || !isReady) "" else runCatching { nativeInjectedScript(url) }.getOrDefault("")
 
     /**
-     * Compiles [easyList] and [easyPrivacy] into the engine. Several seconds of work.
+     * Compiles [listText] into the engine. Several seconds of work over a few megabytes.
      *
-     * Empty strings are tolerated so a partial asset still yields a working engine.
+     * One string holding every list in the chosen preset, joined with newlines. That is equivalent to
+     * passing them separately — the engine concatenates its sources anyway — and it avoids a second
+     * multi-megabyte JNI string. List headers inside the text are still parsed, so metadata
+     * survives.
+     *
+     * Empty text is refused rather than accepted: an engine with no rules would report "ready" while
+     * blocking nothing, and the shields sheet would repeat that claim.
      */
-    fun load(easyList: String, easyPrivacy: String): Boolean {
-        if (!isAvailable) return false
+    fun load(listText: String): Boolean {
+        if (!isAvailable || listText.isEmpty()) return false
         return try {
-            nativeLoad(easyList, easyPrivacy).also { isReady = it }
+            nativeLoad(listText).also { isReady = it }
         } catch (error: UnsatisfiedLinkError) {
             Log.e(TAG, "nativeLoad failed", error)
             isReady = false
@@ -156,7 +162,7 @@ object NativeAdBlock {
     }
 
     private external fun nativeAvailable(): Boolean
-    private external fun nativeLoad(easyList: String, easyPrivacy: String): Boolean
+    private external fun nativeLoad(listText: String): Boolean
     private external fun nativeSerialize(): ByteArray?
     private external fun nativeDeserialize(data: ByteArray): Boolean
     private external fun nativeRelease()

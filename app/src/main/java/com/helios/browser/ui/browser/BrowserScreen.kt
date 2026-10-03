@@ -387,6 +387,7 @@ fun BrowserScreen(
             BrowserOverlay.Menu -> BrowserMenuSheet(
                 tab = currentTab,
                 settings = state.settings,
+                blockedCount = currentTab?.blockedCount ?: 0,
                 onIntent = viewModel::onIntent,
                 onDismiss = { viewModel.onIntent(BrowserIntent.DismissOverlay) }
             )

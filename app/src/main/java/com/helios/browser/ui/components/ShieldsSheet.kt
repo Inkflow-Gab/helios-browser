@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -31,13 +33,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.helios.browser.domain.model.AppSettings
+import com.helios.browser.domain.model.BlockingPreset
 import com.helios.browser.domain.model.BrowserTab
 import com.helios.browser.engine.BlockListSource
 import com.helios.browser.ui.browser.BlockingEngineState
 import com.helios.browser.ui.browser.BrowserIntent
+import com.helios.browser.ui.icons.HeliosGlyphs
 import com.helios.browser.ui.theme.HeliosBlue
 import com.helios.browser.ui.theme.HeliosDarkCard
 import com.helios.browser.ui.theme.HeliosDarkSurface
+import com.helios.browser.ui.theme.HeliosOledBackground
 import com.helios.browser.ui.theme.HeliosShieldGreen
 import com.helios.browser.ui.theme.HeliosTextPrimary
 import com.helios.browser.ui.theme.HeliosTextSecondary
@@ -146,6 +151,16 @@ fun ShieldsSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            PresetPicker(
+                selected = engine.preset,
+                active = engine.activePreset,
+                rebuilding = engine.isRebuilding,
+                enabled = settings.blockAdsAndTrackers,
+                onSelect = { onIntent(BrowserIntent.SetBlockingPreset(it)) }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             ShieldToggleRow(
                 title = "Block ads and trackers",
                 subtitle = "Drops requests to known ad and telemetry hosts before transfer",
@@ -193,6 +208,139 @@ fun ShieldsSheet(
                 subtitle = "Request the desktop version of this page",
                 checked = tab?.isDesktopMode == true,
                 onCheckedChange = { onIntent(BrowserIntent.SetDesktopModeForTab(it)) }
+            )
+        }
+    }
+}
+
+/**
+ * Chooses which filter lists the engine is built from.
+ *
+ * Every option states its cost, because the choice is not really "which is better" — it is how much
+ * blocking you want against how much memory it costs and how likely a site is to break. Hiding that
+ * would make this a list of brand names.
+ *
+ * The selected row and the row that is actually running are distinguished while a switch is still
+ * rebuilding, so the sheet never claims lists are active before they are.
+ */
+@Composable
+private fun PresetPicker(
+    selected: BlockingPreset,
+    active: BlockingPreset,
+    rebuilding: Boolean,
+    enabled: Boolean,
+    onSelect: (BlockingPreset) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(HeliosDarkCard)
+            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(20.dp))
+            .padding(14.dp)
+    ) {
+        Text(
+            text = "Filter lists",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = HeliosTextPrimary
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = if (enabled) {
+                "Which rule sets the engine is built from."
+            } else {
+                "Blocking is off, so switching lists will not take effect until you turn it back on."
+            },
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            color = HeliosTextSecondary
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        BlockingPreset.entries.forEach { preset ->
+            val isSelected = preset == selected
+            val isActive = preset == active
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (isSelected) HeliosSun.copy(alpha = 0.12f) else Color.Transparent
+                    )
+                    .clickable { onSelect(preset) }
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) HeliosSun else Color.Transparent)
+                        .border(
+                            width = 1.5.dp,
+                            color = if (isSelected) HeliosSun else HeliosTextTertiary,
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            imageVector = HeliosGlyphs.Check,
+                            contentDescription = null,
+                            tint = HeliosOledBackground,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = preset.title,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) HeliosSun else HeliosTextPrimary
+                        )
+                        if (isActive && !isSelected) {
+                            // Selected but not yet loaded: the old lists are still what is running.
+                            Text(
+                                text = "rebuilding",
+                                fontSize = 10.sp,
+                                color = HeliosTextTertiary
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = preset.summary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = HeliosTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = preset.listNames.joinToString(" + ") + " · ${preset.sizeHint}",
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = HeliosTextTertiary
+                    )
+                }
+            }
+        }
+
+        if (rebuilding) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Still compiling. Until it finishes, the previous lists are still in force.",
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                color = HeliosSun
             )
         }
     }

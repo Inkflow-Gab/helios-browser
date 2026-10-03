@@ -9,6 +9,7 @@ import com.helios.browser.data.repository.SettingsRepository
 import com.helios.browser.di.IoDispatcher
 import com.helios.browser.domain.model.AppSettings
 import com.helios.browser.domain.model.BlockingConfig
+import com.helios.browser.domain.model.BlockingPreset
 import com.helios.browser.domain.model.BrowserTab
 import com.helios.browser.engine.AdBlockEngine
 import com.helios.browser.engine.BlockingEngineSnapshot
@@ -103,7 +104,36 @@ class BrowserViewModel @Inject constructor(
      */
     private fun observeBlockingEngine() = viewModelScope.launch {
         blockingEngine.status.collect { snapshot ->
-            _state.update { it.copy(blockingEngine = snapshot.toUiState()) }
+            // The chosen preset comes from settings, which arrives on its own flow. Reading it from
+            // state here rather than closing over it keeps the two independent.
+            _state.update { current ->
+                current.copy(blockingEngine = snapshot.toUiState(current.settings.blockingPreset))
+            }
+        }
+    }
+
+    /**
+     * Switches the filter preset, rebuilds the engine, and persists the choice.
+     *
+     * The rebuild happens in the repository because it owns the engine; the write happens here so
+     * the setting is durable even if the rebuild fails. Order matters: persist first, then rebuild,
+     * so a failed rebuild leaves the user's choice visible in the settings with the old engine still
+     * running — which is the honest state — rather than a silently reverted choice.
+     */
+    private fun setBlockingPreset(preset: BlockingPreset) {
+        if (_state.value.settings.blockingPreset == preset) return
+        updateSettings { copy(blockingPreset = preset) }
+        viewModelScope.launch {
+            val loaded = blockingEngine.setPreset(preset)
+            emit(
+                BrowserEffect.ShowMessage(
+                    if (loaded) {
+                        "Switched to ${preset.title}"
+                    } else {
+                        "Could not build the ${preset.title} engine; keeping the current lists"
+                    }
+                )
+            )
         }
     }
 
@@ -196,6 +226,8 @@ class BrowserViewModel @Inject constructor(
             is BrowserIntent.SetSaveHistory -> updateSettings { copy(saveHistoryEnabled = intent.enabled) }
             is BrowserIntent.SetDesktopModeForTab -> setDesktopMode(intent.enabled)
             BrowserIntent.RefreshBlockLists -> refreshBlockLists()
+            is BrowserIntent.SetBlockingPreset -> setBlockingPreset(intent.preset)
+            is BrowserIntent.ShowMessage -> emit(BrowserEffect.ShowMessage(intent.message))
 
             is BrowserIntent.PageStarted -> applyToCurrentTab {
                 it.copy(url = intent.url, isLoading = true, canGoBack = intent.canGoBack, canGoForward = intent.canGoForward)

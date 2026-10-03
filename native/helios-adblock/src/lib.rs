@@ -124,40 +124,38 @@ pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeAvaila
     JNI_TRUE
 }
 
-/// Parses the given lists and installs a fresh engine, replacing any previous one.
+/// Parses the given filter-list text and installs a fresh engine, replacing any previous one.
 ///
 /// This is the slow path: it is several seconds of work over a few megabytes of rules, which is why
 /// [`nativeDeserialize`] exists and the Kotlin side tries it first.
 ///
-/// Returns true if the engine is now loaded.
+/// Takes one string rather than one per list. Every list Helios ships is Adblock Plus syntax, and
+/// `FilterSet::add_filter_list` concatenates its sources anyway, so joining them with a newline on
+/// the Kotlin side is semantically identical and saves a second multi-megabyte JNI string. A list
+/// header (`! Title:`) inside the text is still parsed, so metadata survives.
+///
+/// Returns true if the engine is now loaded. Empty text yields an engine with no rules, which is
+/// valid and simply blocks nothing.
 #[no_mangle]
 pub extern "system" fn Java_com_helios_browser_engine_NativeAdBlock_nativeLoad(
     mut env: JNIEnv,
     _class: JClass,
-    easy_list: JString,
-    easy_privacy: JString,
+    list_text: JString,
 ) -> jboolean {
     fail_open!(JNI_FALSE, {
-        // Sequential, not a tuple: `get_string` takes `&mut JNIEnv`, so two calls in one expression
-        // would be two overlapping mutable borrows and would not compile.
-        let Some(list_one) = read_string(&mut env, &easy_list) else {
+        let Some(list_text) = read_string(&mut env, &list_text) else {
             return JNI_FALSE;
         };
-        let Some(list_two) = read_string(&mut env, &easy_privacy) else {
+        if list_text.is_empty() {
+            // An engine with no lists would report "ready" while blocking nothing, which is a lie
+            // the shields sheet would then repeat. Refuse instead.
             return JNI_FALSE;
-        };
+        }
 
         // `debug = false`: keeps the original rule text out of memory. Helios does not surface
         // "which rule blocked this", so paying for it would be pure overhead.
         let mut filter_set = FilterSet::new(false);
-        // Empty strings are skipped rather than parsed, so a missing download degrades to "one
-        // list" instead of "no lists".
-        if !list_one.is_empty() {
-            filter_set.add_filter_list(list_one, ParseOptions::default());
-        }
-        if !list_two.is_empty() {
-            filter_set.add_filter_list(list_two, ParseOptions::default());
-        }
+        filter_set.add_filter_list(list_text, ParseOptions::default());
 
         let engine = Engine::new_with_filter_set(filter_set);
         install(Some(engine));
