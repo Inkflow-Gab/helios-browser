@@ -44,6 +44,7 @@ import com.helios.browser.ui.theme.HeliosDarkCard
 import com.helios.browser.ui.theme.HeliosDarkSurface
 import com.helios.browser.ui.theme.HeliosOledBackground
 import com.helios.browser.ui.theme.HeliosShieldGreen
+import com.helios.browser.ui.theme.HeliosSun
 import com.helios.browser.ui.theme.HeliosTextPrimary
 import com.helios.browser.ui.theme.HeliosTextSecondary
 import com.helios.browser.ui.theme.HeliosTextTertiary

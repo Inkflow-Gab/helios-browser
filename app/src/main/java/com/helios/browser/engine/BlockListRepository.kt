@@ -118,8 +118,8 @@ class BlockListRepository @Inject constructor(
      * The cache is deleted first, because it is the compiled form of the *old* rules and would
      * otherwise be restored over the top.
      */
-    suspend fun setPreset(next: BlockingPreset) = withContext(Dispatchers.IO) {
-        if (next == preset) return@withContext
+    override suspend fun setPreset(next: BlockingPreset): Boolean = withContext(Dispatchers.IO) {
+        if (next == preset) return@withContext true
         startLock.withLock {
             Log.i(TAG, "Switching blocking preset ${preset.name} -> ${next.name}")
             preset = next

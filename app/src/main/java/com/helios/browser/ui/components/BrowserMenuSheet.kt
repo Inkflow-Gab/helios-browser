@@ -81,7 +81,10 @@ fun BrowserMenuSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val hasRealPage = tab != null && !tab.isStartPage
+    // Bound once so the tile list's lambdas do not need `!!` on a captured nullable, and so the
+    // page cannot be swapped between composing the header and firing a tile.
+    val page = tab?.takeIf { !it.isStartPage }
+    val hasRealPage = page != null
     var showRecommendations by remember { mutableStateOf(false) }
     var showEngines by remember { mutableStateOf(false) }
 
@@ -136,21 +139,24 @@ fun BrowserMenuSheet(
                         add(MenuTile("History", HeliosGlyphs.History) {
                             onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.History))
                         })
-                        if (hasRealPage) {
+                        val open = page
+                        if (open != null) {
                             add(MenuTile("Copy link", HeliosGlyphs.Globe) {
-                                onIntent(BrowserIntent.CopyLink(tab!!.url))
+                                onIntent(BrowserIntent.CopyLink(open.url))
                             })
                             add(MenuTile("Share", HeliosIcons.Sparkle) {
                                 // (url, title) — the other way round shares a page's title as its
                                 // link, which looks broken in the receiving app.
-                                onIntent(BrowserIntent.SharePage(tab!!.url, tab!!.title))
+                                onIntent(BrowserIntent.SharePage(open.url, open.title))
                             })
                         } else {
+                            // With no page loaded there is nothing to copy or share, so those two
+                            // slots go to the things that are useful on the start page instead.
                             add(MenuTile("Downloads", HeliosGlyphs.Download) {
                                 onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Downloads))
                             })
                             add(MenuTile("Find", HeliosIcons.Search) {
-                                onIntent(BrowserIntent.ShowMessage("Find on page is not available yet"))
+                                onIntent(BrowserIntent.ShowMessage("Find on page needs a page open"))
                             })
                         }
                     }
@@ -209,9 +215,9 @@ fun BrowserMenuSheet(
                 SettingsRow(
                     icon = HeliosIcons.Desktop,
                     title = "Desktop site mode",
-                    value = if (tab?.isDesktopMode == true) "This tab only" else "Off"
+                    value = if (page?.isDesktopMode == true) "This tab only" else "Off"
                 ) {
-                    onIntent(BrowserIntent.SetDesktopModeForTab(!(tab?.isDesktopMode ?: false)))
+                    onIntent(BrowserIntent.SetDesktopModeForTab(!(page?.isDesktopMode ?: false)))
                 }
             }
 
@@ -402,9 +408,12 @@ private fun PageHeader(tab: BrowserTab?, hasRealPage: Boolean) {
         )
         return
     }
+    // Bound to a local so every use below is on a non-null receiver. `tab` is a parameter and the
+    // compiler will not smart-cast it from `hasRealPage`, because that flag is not a proof of it.
+    val page = tab ?: return
     Column(modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) {
         Text(
-            text = tab.title,
+            text = page.title,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
             color = HeliosTextPrimary,
@@ -413,14 +422,14 @@ private fun PageHeader(tab: BrowserTab?, hasRealPage: Boolean) {
         Spacer(modifier = Modifier.height(2.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                imageVector = if (tab.isSecure) HeliosIcons.Lock else HeliosIcons.Sparkle,
+                imageVector = if (page.isSecure) HeliosIcons.Lock else HeliosIcons.Sparkle,
                 contentDescription = null,
-                tint = if (tab.isSecure) HeliosShieldGreen else HeliosTextSecondary,
+                tint = if (page.isSecure) HeliosShieldGreen else HeliosTextSecondary,
                 modifier = Modifier.size(11.dp)
             )
             Spacer(modifier = Modifier.width(5.dp))
             Text(
-                text = tab.displayHost,
+                text = page.displayHost,
                 fontSize = 11.sp,
                 color = HeliosTextSecondary,
                 maxLines = 1
