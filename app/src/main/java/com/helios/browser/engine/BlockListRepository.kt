@@ -1,5 +1,6 @@
 package com.helios.browser.engine
 
+import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -173,9 +174,40 @@ class BlockListRepository @Inject constructor(
         scope.launch { refresh() }
     }
 
+    /**
+     * Restores a cached engine, if there is one this device can afford to load.
+     *
+     * ## Why there is a size gate here
+     * The serialised engine for EasyList plus EasyPrivacy runs to tens of megabytes. Reading it
+     * costs one `ByteArray` of that size, and handing it to `nativeDeserialize` costs a second copy
+     * inside Rust — so restoring a 40MB cache peaks at roughly 80MB of heap before a single rule is
+     * matched. On a low-RAM phone that is an `OutOfMemoryError` on the launch path, which is exactly
+     * the "it will not open after a few launches" report: the first launch has no cache and works,
+     * and every launch after the cache exists does not.
+     *
+     * So the cache is treated as an optimisation with a budget, not as the source of truth. Over
+     * [MAX_CACHE_BYTES], or on a device the platform reports as low-RAM, it is skipped entirely and
+     * the engine is rebuilt from the bundled lists. That costs a few seconds of parse and removes
+     * the failure mode, which is the right trade for a browser.
+     *
+     * An oversized cache is deleted rather than left in place, because the gate is a length check
+     * and a file that is never read would otherwise occupy storage forever.
+     */
     private fun restoreFromCache(): Boolean {
         val file = cacheFile
         if (!file.exists() || file.length() == 0L) return false
+
+        val size = file.length()
+        if (size > MAX_CACHE_BYTES) {
+            Log.w(TAG, "Engine cache is ${size / 1024 / 1024}MB, over the budget; deleting it")
+            runCatching { file.delete() }
+            return false
+        }
+        if (isLowRamDevice) {
+            Log.i(TAG, "Skipping the ${size / 1024}KB engine cache on a low-RAM device")
+            return false
+        }
+
         return runCatching { NativeAdBlock.deserialize(file.readBytes()) }
             .onFailure { Log.w(TAG, "Engine cache rejected; rebuilding from bundled lists", it) }
             .getOrDefault(false)
@@ -237,8 +269,20 @@ class BlockListRepository @Inject constructor(
      * and if the process died during the write the failure would look like a corrupt cache rather
      * than an interrupted one.
      */
+    /**
+     * Writes the serialised engine, if it is small enough to be worth restoring later.
+     *
+     * Serialising already costs a copy in Rust and a copy in the Java array, so the size is checked
+     * before it is written rather than after: an oversized cache is not merely useless, it is the
+     * thing that makes the next launch fail. See [restoreFromCache].
+     */
     private fun writeCache() {
+        if (isLowRamDevice) return
         val bytes = NativeAdBlock.serialize() ?: return
+        if (bytes.size > MAX_CACHE_BYTES) {
+            Log.w(TAG, "Engine is ${bytes.size / 1024 / 1024}MB; not caching it")
+            return
+        }
         val target = cacheFile
         val temp = File(target.parentFile, "${target.name}.tmp")
         runCatching {
@@ -251,6 +295,22 @@ class BlockListRepository @Inject constructor(
         }.onFailure { Log.w(TAG, "Could not write engine cache", it) }
     }
 
+    /**
+     * True when the platform considers this device memory-constrained.
+     *
+     * `isLowRamDevice` is the honest signal the platform gives us; the memory class is a second
+     * opinion. Either one disqualifies the device from a cache that costs tens of megabytes.
+     *
+     * Read once and cached, because it cannot change during the process's life and
+     * `ActivityManager` is not free to look up repeatedly.
+     */
+    private val isLowRamDevice: Boolean by lazy {
+        runCatching {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            manager.isLowRamDevice || manager.memoryClass < MIN_MEMORY_CLASS_MB
+        }.getOrDefault(false)
+    }
+
     private val cacheFile: File
         get() = File(File(context.filesDir, CACHE_DIR), CACHE_FILE)
 
@@ -258,6 +318,24 @@ class BlockListRepository @Inject constructor(
         const val TAG = "BlockListRepository"
         const val CACHE_DIR = "blocklist"
         const val CACHE_FILE = "engine.bin"
+
+        /**
+         * Largest serialised engine worth caching, in bytes.
+         *
+         * Restoring costs two copies — the Java `ByteArray` and the Rust `Vec` behind
+         * `convert_byte_array` — so this is really a heap budget rather than a disk budget. 32MB of
+         * cache is roughly 64MB of transient heap, which is a lot on a 128MB-class device but
+         * unremarkable on a modern one, and the gate exists to stop it being a launch-path OOM on
+         * the phone this was first reported from.
+         */
+        const val MAX_CACHE_BYTES = 32L * 1024 * 1024
+
+        /**
+         * Below this `memoryClass`, the platform is telling us there is not much to play with and
+         * the engine cache is skipped entirely. 192MB is roughly where a WebView plus a browser
+         * process starts fighting for room.
+         */
+        const val MIN_MEMORY_CLASS_MB = 192
         const val EASY_LIST_ASSET = "blocklists/easylist.txt.gz"
         const val EASY_PRIVACY_ASSET = "blocklists/easyprivacy.txt.gz"
         const val CONNECT_TIMEOUT_MS = 15_000

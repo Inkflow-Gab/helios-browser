@@ -95,13 +95,19 @@ object WebRequestClassifier {
      * headers — there is no single-header accessor, so both lookups go through the map. Header names
      * are matched case-insensitively here because a browser is free to send `accept` or `accept-*`,
      * and the map's keys are whatever the page asked for.
+     *
+     * The map is read through [runCatching] into an empty map rather than assigned directly. It is a
+     * Java method, so Kotlin sees a platform type and does not insert a null check — but the
+     * annotation is not `@NonNull` and OEM WebView providers have been known to return null, which
+     * would make the extension call below throw on the first intercepted request. That is exactly
+     * when this runs: the first page load, not before.
      */
     fun fromRequest(request: WebResourceRequest): String {
-        val headers = request.requestHeaders
+        val headers = runCatching { request.requestHeaders }.getOrNull().orEmpty()
         return classify(
             url = request.url.toString(),
             accept = headers.header("accept"),
-            isForMainFrame = request.isForMainFrame,
+            isForMainFrame = request.isForMainFrame == true,
             hasXRequestedWith = headers.header("x-requested-with") != null
         )
     }

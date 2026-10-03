@@ -2,6 +2,7 @@ package com.helios.browser.engine
 
 import android.graphics.Bitmap
 import android.util.Base64
+import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -54,7 +55,36 @@ class HeliosWebViewClient(
         return WebResourceResponse(mimeType, "UTF-8", ByteArrayInputStream(body))
     }
 
+    /**
+     * Decides whether to block a request.
+     *
+     * ## Why the whole body is wrapped
+     * This runs on a WebView background thread, and **an exception thrown here kills the app** —
+     * there is no way for the page to survive it and nothing catches it on the way out. So the body
+     * cannot be allowed to throw, and it touches a lot of code that can: the engine, the classifier,
+     * a platform `WebResourceRequest` whose accessors vary between WebView providers.
+     *
+     * Failing open is the correct direction for every one of those failures. A missed ad costs
+     * nothing; a crash costs the user their session. The user reported exactly that: first launch
+     * was fine — the start page creates no WebView, so this callback never runs — and the first
+     * page load killed the process.
+     *
+     * @return a response to substitute, or null to let the request proceed.
+     */
     override fun shouldInterceptRequest(
+        view: WebView?,
+        request: WebResourceRequest?
+    ): WebResourceResponse? = try {
+        decideWhetherToBlock(view, request)
+    } catch (error: Throwable) {
+        // Deliberately Throwable, not Exception: this is the one place in the app where an Error as
+        // well as an Exception must not be allowed to reach the WebView. Logged and swallowed.
+        Log.w(TAG, "Interception failed; letting the request through", error)
+        null
+    }
+
+    /** The actual decision, kept separate so [shouldInterceptRequest] can wrap it wholesale. */
+    private fun decideWhetherToBlock(
         view: WebView?,
         request: WebResourceRequest?
     ): WebResourceResponse? {
@@ -161,6 +191,8 @@ class HeliosWebViewClient(
     }
 
     private companion object {
+        const val TAG = "HeliosWebViewClient"
+
         /**
          * The smallest valid GIF: one transparent pixel.
          *
