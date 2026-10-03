@@ -11,6 +11,7 @@ import com.helios.browser.domain.model.AppSettings
 import com.helios.browser.domain.model.BlockingConfig
 import com.helios.browser.domain.model.BrowserTab
 import com.helios.browser.engine.AdBlockEngine
+import com.helios.browser.engine.BlockingEngineSnapshot
 import com.helios.browser.engine.BlockingEngineStatus
 import com.helios.browser.engine.DownloadDispatcher
 import com.helios.browser.engine.DownloadRequest
@@ -93,44 +94,32 @@ class BrowserViewModel @Inject constructor(
     }
 
     /**
-     * Polls the engine and mirrors it into state.
+     * Mirrors the adblock engine's status into state.
      *
-     * A polling loop rather than a Flow because [BlockingEngineStatus] reports plain values rather
-     * than owning a stream, and the engine changes at most a handful of times per session. The
-     * alternative — an `initialize` callback — would leave the sheet stale on the very first
-     * launch, where the engine finishes loading after the browser screen is already up.
-     *
-     * Cancellable by [viewModelScope], unlike the engine load itself which lives in the Application
-     * scope; that separation is deliberate, since the engine must survive the screen.
+     * Collects a Flow rather than polling. The earlier version woke once a second and rebuilt
+     * [BrowserState] every time, which meant a full recomposition of the browser screen forever and a
+     * `File.exists()` stat on the main thread each round — and all to learn something that changes
+     * perhaps four times per session. The repository publishes on real transitions instead.
      */
     private fun observeBlockingEngine() = viewModelScope.launch {
-        while (true) {
-            _state.update { it.copy(blockingEngine = currentEngineState()) }
-            delay(ENGINE_POLL_INTERVAL_MS)
+        blockingEngine.status.collect { snapshot ->
+            _state.update { it.copy(blockingEngine = snapshot.toUiState()) }
         }
     }
-
-    private fun currentEngineState(isRefreshing: Boolean = _state.value.blockingEngine.isRefreshing) =
-        BlockingEngineState(
-            isAvailable = blockingEngine.isEngineAvailable,
-            isReady = blockingEngine.isEngineReady,
-            isRefreshing = isRefreshing,
-            source = blockingEngine.source,
-            cacheSizeBytes = blockingEngine.cacheSizeBytes
-        )
 
     /**
      * Downloads fresh filter lists and recompiles the engine.
      *
      * Reports the outcome either way. A silent failure would leave the user tapping "Update" with
      * no idea whether it worked, which is the one thing a settings screen must not do.
+     *
+     * The progress flag comes from the collected status rather than being set here, so there is one
+     * source of truth for it.
      */
     private fun refreshBlockLists() {
         if (_state.value.blockingEngine.isRefreshing) return
         viewModelScope.launch {
-            _state.update { it.copy(blockingEngine = currentEngineState(isRefreshing = true)) }
             val updated = blockingEngine.refresh()
-            _state.update { it.copy(blockingEngine = currentEngineState(isRefreshing = false)) }
             emit(
                 BrowserEffect.ShowMessage(
                     if (updated) {
@@ -521,14 +510,5 @@ class BrowserViewModel @Inject constructor(
 
     private companion object {
         const val SESSION_SAVE_DEBOUNCE_MS = 600L
-
-        /**
-         * How often the shields sheet's view of the adblock engine is resampled.
-         *
-         * Long enough that it is irrelevant to battery — the loop only reads four already-computed
-         * properties — and short enough that the sheet never visibly lags the engine finishing its
-         * first load.
-         */
-        const val ENGINE_POLL_INTERVAL_MS = 1_000L
     }
 }

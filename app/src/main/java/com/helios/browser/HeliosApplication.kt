@@ -1,6 +1,7 @@
 package com.helios.browser
 
 import android.app.Application
+import com.helios.browser.diagnostics.CrashReporter
 import com.helios.browser.engine.BlockListRepository
 import com.helios.browser.engine.NativeAdBlock
 import dagger.hilt.android.HiltAndroidApp
@@ -27,6 +28,10 @@ class HeliosApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // First thing, before anything can throw, so a crash anywhere below still leaves a trace.
+        CrashReporter.install(this)
+
         // Safe Browsing is *not* enabled here. There is no process-wide switch for it: the
         // androidx.webkit API is `WebSettingsCompat.setSafeBrowsingEnabled(WebSettings, Boolean)`,
         // which is per-WebView, so `WebViewFactory` applies it when it builds a tab and honours the

@@ -29,6 +29,21 @@ object NativeAdBlock {
      *
      * Reading [System.loadLibrary] into a `val` matters: doing it lazily per call would repeat a
      * failing load on every intercepted request.
+     *
+     * The catch list is deliberately wider than "the library is missing". This is an `object`, so a
+     * throwable that escapes the initializer is *fatal and permanent* — the JVM marks the class as
+     * failed and every later access raises `NoClassDefFoundError`. A single uncaught throwable here
+     * would therefore take the browser down on the first intercepted request rather than degrading
+     * to the host list.
+     *
+     * - `UnsatisfiedLinkError` — no `.so` for this ABI, or a missing dependency inside it.
+     * - `LinkageError` — covers `ExceptionInInitializerError` and the `NoClassDefFoundError` family,
+     *   which is what a half-initialised library produces.
+     * - `SecurityException` — blocked by device policy.
+     * - `RuntimeException` — a broken loader on some OEM builds.
+     *
+     * `Error` is *not* caught wholesale: swallowing `OutOfMemoryError` here would be worse than
+     * crashing. `LinkageError` is the specific one that matters.
      */
     val isAvailable: Boolean = try {
         System.loadLibrary(LIBRARY)
@@ -36,8 +51,14 @@ object NativeAdBlock {
     } catch (error: UnsatisfiedLinkError) {
         Log.w(TAG, "Native adblock unavailable; using the built-in host matcher only", error)
         false
+    } catch (error: LinkageError) {
+        Log.e(TAG, "Native adblock failed to initialise", error)
+        false
     } catch (error: SecurityException) {
         Log.w(TAG, "Native adblock blocked by device policy", error)
+        false
+    } catch (error: RuntimeException) {
+        Log.e(TAG, "Native adblock loader threw", error)
         false
     }
 

@@ -61,6 +61,7 @@ import com.helios.browser.ui.adaptive.HeliosLayout
 import com.helios.browser.ui.components.AddressBar
 import com.helios.browser.ui.components.BookmarksSheet
 import com.helios.browser.ui.components.BrowserMenuSheet
+import com.helios.browser.ui.components.CrashBanner
 import com.helios.browser.ui.components.HistorySheet
 import com.helios.browser.ui.components.ShieldsSheet
 import com.helios.browser.ui.components.StartPageView
@@ -307,6 +308,10 @@ fun BrowserScreen(
             }
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
+                // A crash on the previous run is surfaced here rather than as a launch-blocking
+                // dialog: a beta browser that refuses to start is worse than one that starts and
+                // explains itself. The banner is dismissible and the trace stays on disk.
+                CrashBanner(onDismiss = {})
                 if (layout.omniboxAtTop) {
                     AddressBar(
                         tab = currentTab,

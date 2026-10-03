@@ -7,6 +7,7 @@ import com.helios.browser.domain.model.Bookmark
 import com.helios.browser.domain.model.BrowserTab
 import com.helios.browser.domain.model.HistoryEntry
 import com.helios.browser.engine.BlockListSource
+import com.helios.browser.engine.BlockingEngineSnapshot
 
 /** Which full-screen surface, if any, is currently covering the page. */
 @Immutable
@@ -31,9 +32,9 @@ data class DownloadRecord(
 /**
  * A snapshot of the adblock engine, kept in state so the shields sheet can report it truthfully.
  *
- * A snapshot rather than the repository itself, for two reasons: `StateFlow` only emits when the
- * emitted value is a different instance, and `BrowserState` must not carry a `Context`-owning
- * object into Compose.
+ * This is the UI's own value type rather than [com.helios.browser.engine.BlockingEngineSnapshot]
+ * because `BrowserState` is a Compose state object: it carries `@Immutable` so recomposition can be
+ * skipped, and it is the shape the screens actually read. [toUiState] is the only conversion.
  */
 @Immutable
 data class BlockingEngineState(
@@ -43,6 +44,20 @@ data class BlockingEngineState(
     val isRefreshing: Boolean = false,
     val source: BlockListSource = BlockListSource.NONE,
     val cacheSizeBytes: Long = 0L
+)
+
+/**
+ * Copies the engine's snapshot into the UI's value type.
+ *
+ * Straight field-for-field today. It exists so a change to either side is a compile error here
+ * rather than a silently missing field on a settings screen.
+ */
+fun BlockingEngineSnapshot.toUiState(): BlockingEngineState = BlockingEngineState(
+    isAvailable = isAvailable,
+    isReady = isReady,
+    isRefreshing = isRefreshing,
+    source = source,
+    cacheSizeBytes = cacheSizeBytes
 )
 
 @Immutable

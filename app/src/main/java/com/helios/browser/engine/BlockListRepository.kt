@@ -6,6 +6,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -63,21 +66,32 @@ class BlockListRepository @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val startLock = Mutex()
 
-    @Volatile
-    override var source: BlockListSource = BlockListSource.NONE
+    private val _status = MutableStateFlow(BlockingEngineSnapshot())
+
+    override val status: StateFlow<BlockingEngineSnapshot> = _status.asStateFlow()
+
+    private var source: BlockListSource = BlockListSource.NONE
         private set
 
-    @Volatile
-    var lastRefreshAt: Long = 0L
+    private var lastRefreshAt: Long = 0L
         private set
 
-    /** Bytes on disk for the cached engine, or 0 when there is no cache. Shown in the shields sheet. */
-    override val cacheSizeBytes: Long
-        get() = cacheFile.takeIf { it.exists() }?.length() ?: 0L
-
-    override val isEngineAvailable: Boolean get() = NativeAdBlock.isAvailable
-
-    override val isEngineReady: Boolean get() = NativeAdBlock.isReady
+    /**
+     * Republishes [BlockingEngineSnapshot] after any change to the engine.
+     *
+     * Reads the cache size here rather than in the flow's consumers, so `File.exists()` runs on
+     * whichever thread made the change — in practice always IO, because every mutation happens
+     * inside a `withContext(Dispatchers.IO)` in this class.
+     */
+    private fun publish(isRefreshing: Boolean = _status.value.isRefreshing) {
+        _status.value = BlockingEngineSnapshot(
+            isAvailable = NativeAdBlock.isAvailable,
+            isReady = NativeAdBlock.isReady,
+            isRefreshing = isRefreshing,
+            source = source,
+            cacheSizeBytes = cacheFile.takeIf { it.exists() }?.length() ?: 0L
+        )
+    }
 
     /**
      * Loads an engine, reusing the cache when it is still valid.
@@ -90,6 +104,7 @@ class BlockListRepository @Inject constructor(
      */
     suspend fun initialize(onReady: (BlockListSource) -> Unit = {}): Boolean = startLock.withLock {
         if (NativeAdBlock.isReady) {
+            publish()
             onReady(source)
             return@withLock true
         }
@@ -100,6 +115,7 @@ class BlockListRepository @Inject constructor(
             if (!loaded) {
                 Log.e(TAG, "No filter lists could be loaded; ad blocking is inert")
             }
+            publish()
             onReady(source)
             loaded
         }
@@ -114,7 +130,10 @@ class BlockListRepository @Inject constructor(
      * @return true if the engine was rebuilt from fresh lists.
      */
     override suspend fun refresh(): Boolean = startLock.withLock {
-        refreshLocked()
+        publish(isRefreshing = true)
+        val rebuilt = refreshLocked()
+        publish(isRefreshing = false)
+        rebuilt
     }
 
     /**
