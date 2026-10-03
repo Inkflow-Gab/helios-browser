@@ -76,7 +76,7 @@ fun HeliosSunMark(
     animate: Boolean = true
 ) {
     val spin = spinDegrees ?: if (animate) rememberSteadySpin() else 0f
-    val geometry = remember(spikeColor) { SunGeometry() }
+    val geometry = remember(spikeColor) { SunGeometry.build() }
 
     Canvas(
         modifier = modifier.graphicsLayer {
@@ -115,9 +115,8 @@ private class SunGeometry(
     companion object {
         fun build(): SunGeometry {
             val chord = CHORD_FRACTION * SUN_RADIUS
-            // Where the chord meets the circle. sqrt(1 - k^2) with k the chord's offset in radii.
-            const val k = CHORD_FRACTION
-            val halfSpan = SUN_RADIUS * sqrt(1f - k * k)
+            // Half the chord's width: the circle reaches |x| = R*sqrt(1 - k^2) at that height.
+            val halfSpan = SUN_RADIUS * sqrt(1f - CHORD_FRACTION * CHORD_FRACTION)
             val chordY = DESIGN_CENTRE + chord
 
             val left = Offset(DESIGN_CENTRE - halfSpan, chordY)
@@ -125,8 +124,12 @@ private class SunGeometry(
 
             // Screen-space angles: 0 is 3 o'clock and they increase clockwise, so the arc that goes
             // over the top from the left intersection to the right one is the sweep below.
-            val startAngle = Math.toDegrees(atan2(k.toDouble(), -halfSpan.toDouble())).toFloat()
-            val endAngle = Math.toDegrees(atan2(k.toDouble(), halfSpan.toDouble())).toFloat()
+            val startAngle = Math.toDegrees(
+                atan2(CHORD_FRACTION.toDouble(), -halfSpan.toDouble())
+            ).toFloat()
+            val endAngle = Math.toDegrees(
+                atan2(CHORD_FRACTION.toDouble(), halfSpan.toDouble())
+            ).toFloat()
             val sweep = (endAngle - startAngle + 360f) % 360f
 
             val body = Path().apply {
@@ -144,10 +147,12 @@ private class SunGeometry(
             }
 
             val spikes = buildList {
-                // Eight spikes on a 45 degree step, only across the upper 180 degrees so they read as
-                // rays coming off a sun rather than as a full ring.
-                val step = 45f
-                for (degree in -180f..180f step step) {
+                // Eight spikes across the upper half only, so they read as rays coming off a sun
+                // rather than as a closed ring. The step is a named constant rather than a local
+                // `val step`, because a local named `step` shadows the `step` infix function used
+                // on the line below and the loop does not compile.
+                var degree = -180f
+                while (degree <= 180f) {
                     val radians = Math.toRadians(degree.toDouble())
                     val cosR = cos(radians).toFloat()
                     val sinR = sin(radians).toFloat()
@@ -168,6 +173,7 @@ private class SunGeometry(
                             close()
                         }
                     )
+                    degree += SPIKE_STEP_DEGREES
                 }
             }
 
@@ -291,6 +297,9 @@ private const val CHORD_FRACTION = 0.34f
 private const val SPIKE_INNER_RADIUS = SUN_RADIUS * 0.94f
 private const val SPIKE_OUTER_RADIUS = SUN_RADIUS * 1.52f
 private const val SPIKE_HALF_WIDTH = 2.6f
+
+/** Angular gap between corona spikes. 45 degrees gives nine spokes across the upper half. */
+private const val SPIKE_STEP_DEGREES = 45f
 
 /** The highlight disc inside the sun: offset up and left, so the disc has a light source. */
 private const val HIGHLIGHT_RADIUS = SUN_RADIUS * 0.46f
