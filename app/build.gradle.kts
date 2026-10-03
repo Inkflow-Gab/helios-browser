@@ -98,6 +98,24 @@ dependencies {
     // AndroidX WebKit: hardware-accelerated Chromium WebView, Safe Browsing
     implementation("androidx.webkit:webkit:1.11.0")
 
+    // GeckoView: Firefox's engine, published by Mozilla and not by Google.
+    //
+    // Why it is here and not an extension host we wrote: `android.webkit.WebView` has no extension
+    // API at all, so no amount of code in this app can load one. Gecko is Firefox, so the whole
+    // WebExtensions system comes with it -- uBlock Origin, Bitwarden, Dark Reader, containers.
+    //
+    // What it costs, stated plainly rather than discovered later:
+    //   - The AAR is ~231 MB because it ships every ABI in one file. Split per-ABI it lands nearer
+    //     100-140 MB, against roughly 11 MB today.
+    //   - The engine/ layer is replaced. Nothing in ui/, domain/, data/ or di/ changes.
+    //   - adblock-rust retires. Gecko ships tracking protection and uBlock works, which is strictly
+    //     better than the list of hosts this app compiled in.
+    //
+    // Declared but not yet consumed: engine/GeckoSessionHost.kt is the first slice. Nothing calls
+    // into Gecko until that exists, so if this dependency turns out to be unworkable the deletion is
+    // one line rather than an unwind.
+    implementation("org.mozilla.geckoview:geckoview:157.0.20260924084938")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
