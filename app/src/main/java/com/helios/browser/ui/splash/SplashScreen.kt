@@ -70,18 +70,24 @@ fun SplashScreen(
 ) {
     // One shared entrance progress rather than a per-child animation, so the wordmark cannot fade
     // in before the mark it belongs to. Staggering happens via thresholds on this single value.
+    //
+    // 650ms, not 900: the splash is held for at least SPLASH_MIN_VISIBLE_MILLIS (900ms), so a 900ms
+    // entrance finished at the exact moment the fade-out began and the settled state was never
+    // actually on screen. 650 leaves a beat where the mark is at rest.
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        entrance.animateTo(1f, tween(durationMillis = 900, easing = LinearOutSlowInEasing))
+        entrance.animateTo(1f, tween(durationMillis = 650, easing = LinearOutSlowInEasing))
     }
 
-    // A slower, separate loop so the rings keep breathing after the entrance has settled. If this
-    // shared the entrance tween the whole thing would visibly stop dead at 900ms.
-    val breath = rememberInfiniteTransition(label = "splash-pulse").animateFloat(
+    // One slow loop for the halo brightness. The previous version animated two 320dp rings
+    // expanding and fading, which meant a large alpha-blended shape was being scaled on the CPU
+    // every frame for the whole time the splash was up — the single most expensive thing on the
+    // screen, and it looked like a generic loading spinner besides.
+    val breath = rememberInfiniteTransition(label = "splash-breath").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing),
+            animation = tween(4200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "breath"
@@ -90,7 +96,7 @@ fun SplashScreen(
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = fadeIn(tween(320)),
+        enter = fadeIn(tween(280)),
         exit = fadeOut(tween(420))
     ) {
         Box(
@@ -99,46 +105,51 @@ fun SplashScreen(
                 .background(HeliosOledBackground),
             contentAlignment = Alignment.Center
         ) {
-            // Two rings at half a cycle apart, expanding and fading. They sit behind the mark and
-            // never stop, so the screen does not look dead while a slow disk read finishes.
-            repeat(2) { ring ->
-                val phase = (breath.value + ring * 0.5f) % 1f
-                HeliosOrbitRing(
-                    modifier = Modifier
-                        .size(320.dp)
-                        .alpha((1f - phase) * 0.30f)
-                        .scale(0.55f + phase * 0.75f),
-                    color = HeliosSun
-                )
-            }
-
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                HeliosSunMark(
-                    modifier = Modifier
-                        .size(148.dp)
-                        .scale(0.72f + entrance.value * 0.28f)
-                        .alpha(entrance.value)
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    // A single hairline ring, breathing in opacity only. Opacity is a cheap
+                    // compositor property; scale on a large alpha shape was not.
+                    HeliosOrbitRing(
+                        modifier = Modifier
+                            .size(196.dp)
+                            .alpha(0.10f + breath.value * 0.14f),
+                        color = HeliosSun
+                    )
+                    // Counter-rotating against the mark, which is what makes the two read as
+                    // separate planes rather than one spinning sticker.
+                    HeliosCounterRing(
+                        modifier = Modifier.size(150.dp),
+                        color = HeliosSun.copy(alpha = 0.5f),
+                        strokeWidth = 1.dp
+                    )
+                    HeliosSunMark(
+                        modifier = Modifier
+                            .size(148.dp)
+                            .scale(0.78f + entrance.value * 0.22f)
+                            .alpha(entrance.value)
+                    )
+                }
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(30.dp))
 
                 Text(
-                    text = stringResource(R.string.app_name).uppercase(),
+                    text = stringResource(R.string.app_name),
                     color = HeliosSun,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Light,
-                    // Tracking collapses as the mark settles, which reads as the wordmark pulling
-                    // itself together.
-                    letterSpacing = (14f - entrance.value * 9f).sp,
+                    fontSize = 27.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    // Tracking opens up and then settles, which reads as the wordmark taking a
+                    // breath. The previous version went to 14sp at 30sp of text, which was wide
+                    // enough to look stretched rather than deliberate.
+                    letterSpacing = (7f + (1f - entrance.value) * 5f).sp,
                     modifier = Modifier.alpha(stagger(entrance.value, 0.35f))
                 )
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(9.dp))
 
                 Text(
                     text = tagline,
                     color = HeliosTextSecondary,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()

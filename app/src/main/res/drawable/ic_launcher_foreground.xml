@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Helios launcher foreground: a radiating sun.
+    Helios launcher foreground: a sun with a twelve-spike corona.
 
-    Eight tapered rays on a 45 degree step around a warm core. Everything is kept inside a 66dp
-    diameter circle centred on (54,54) because the launcher masks the outer 18dp of a 108dp
-    adaptive icon on every shape (circle, squircle, rounded square).
+    Twelve tapered spikes on a 30 degree step, with the four at the cardinal points reaching
+    further than the other eight. That uneven rhythm is deliberate: a corona where every spike is
+    identical reads as a generated sunburst, and gives the rotation nothing to resolve against.
+    Each spike is a filled triangle coming to a point, not a stroked line, so the arms taper.
 
-    This is the still variant, used below API 26 and as the crash-safe fallback. The animated
-    variant lives in ic_launcher_foreground_animated.xml and shares this geometry.
+    Everything stays inside a 33dp radius of (54,54), because the launcher masks the outer 18dp of
+    a 108dp adaptive icon on every shape — circle, squircle, rounded square.
+
+    These numbers are the Compose mark's geometry in ui/splash/HeliosSunMark.kt scaled by 0.75, so
+    the icon, the splash, the start page and onboarding are the same mark. If you change one,
+    change the other.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -17,65 +22,92 @@
 
     <!-- Warm halo behind the core, so the disc does not read as a flat sticker. -->
     <path
-        android:pathData="M54,42 A12,12 0 1,1 53.99,42 Z"
+        android:pathData="M54,44.4 A9.6,9.6 0 1,1 53.99,44.4 Z"
         android:fillColor="#33FFC94D" />
 
-    <!-- Rays. Long/short alternating so the rotation reads as motion, not as a plain circle. -->
+    <!--
+        Corona. Long spikes are #FFD166, short ones #FFC94D. Each <group> rotates a single
+        upward-pointing spike about the centre rather than recomputing twelve sets of coordinates,
+        which keeps the file readable and the geometry obviously consistent.
+    -->
     <group
-        android:name="ray"
         android:pivotX="54"
         android:pivotY="54"
         android:rotation="0">
-        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+        <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
     </group>
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:rotation="45">
-        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        android:rotation="30">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="60">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
     </group>
     <group
         android:pivotX="54"
         android:pivotY="54"
         android:rotation="90">
-        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+        <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
     </group>
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:rotation="135">
-        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        android:rotation="120">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="150">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
     </group>
     <group
         android:pivotX="54"
         android:pivotY="54"
         android:rotation="180">
-        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+        <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
     </group>
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:rotation="225">
-        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        android:rotation="210">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="240">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
     </group>
     <group
         android:pivotX="54"
         android:pivotY="54"
         android:rotation="270">
-        <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+        <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
     </group>
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:rotation="315">
-        <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        android:rotation="300">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+    </group>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="330">
+        <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
     </group>
 
-    <!-- Core. -->
+    <!-- Core, with the highlight offset up and left so it reads as lit rather than flat. -->
     <path
-        android:pathData="M54,43 A11,11 0 1,1 53.99,43 Z"
+        android:pathData="M54,45.38 A8.62,8.62 0 1,1 53.99,45.38 Z"
         android:fillColor="#FFC94D" />
     <path
-        android:pathData="M54,47 A7,7 0 1,1 53.99,47 Z"
+        android:pathData="M53.34,44.72 A4.48,4.48 0 1,1 53.33,44.72 Z"
         android:fillColor="#FFF3D6" />
 </vector>

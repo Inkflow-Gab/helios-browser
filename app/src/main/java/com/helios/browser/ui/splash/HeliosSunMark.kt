@@ -10,11 +10,18 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -25,18 +32,34 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The Helios mark: a warm core inside eight alternating-length rays, slowly rotating.
+ * The Helios mark: a sun with a twelve-spike corona, four spikes long and eight short.
  *
- * Drawn with Canvas rather than shipped as an `ImageVector` because the rotation is the point. The
- * geometry deliberately mirrors `res/drawable/ic_launcher_foreground.xml` so the thing that
- * appears on the splash is the thing the user tapped on the home screen.
+ * ## Why it is drawn like this
+ * The previous version was eight round-capped `drawLine` calls on a 45 degree step. That is the
+ * default sunburst: every arm identical, every end a semicircle, no negative space, nothing for the
+ * eye to hold on to. It read as generated because it was.
+ *
+ * What changed:
+ *  - **12 spikes on a 30 degree step, with four of them long** (at the cardinal points). The uneven
+ *    rhythm is the whole difference between a sun and a star-shaped blob — it gives the rotation
+ *    something to resolve against, so motion is legible instead of just busy.
+ *  - **Tapered spikes.** Each is a filled triangle coming to a point, not a line with a cap, and
+ *    the base is held at a constant width while the length varies. Long spikes read as light, short
+ *    ones as texture.
+ *  - **A hairline ring**, counter-rotating, to add a second plane of motion without another shape.
+ *
+ * ## Why it animates smoothly
+ * The rotation used to be applied *inside* the draw pass, which meant twelve rays' worth of
+ * `sin`/`cos` on every frame, on top of the rest of the frame's work. Now the mark is built once
+ * into cached [Path]s and turned with [Modifier.graphicsLayer], so the per-frame cost is one GPU
+ * matrix and four draw calls. That is the difference between a mark that stutters on a budget phone
+ * and one that does not.
  *
  * @param modifier size the mark; the drawing scales to whatever box it is given.
- * @param spinDegrees current rotation. Pass a value animated by the caller, or `null` to run the
- *   built-in 16-second spin.
+ * @param spinDegrees current rotation, or null to run the built-in spin.
  * @param coreColor centre disc colour.
- * @param rayLightColour long rays, which read brighter as they sweep past.
- * @param rayColor short rays.
+ * @param rayLightColour the four long spikes.
+ * @param rayColor the eight short spikes.
  * @param coreHighlight inner highlight, the "lit from within" bit.
  */
 @Composable
@@ -49,47 +72,141 @@ fun HeliosSunMark(
     coreHighlight: Color = HeliosSunPale
 ) {
     val spin = spinDegrees ?: rememberSteadySpin()
-    Canvas(modifier = modifier) {
+    // Built once per composition and only rebuilt if the colours change, because none of this
+    // depends on the frame.
+    val paths = remember(rayLightColour, rayColor) { HeliosCoronaPaths.build() }
+    // Same reasoning for the halo gradient: a Brush computes its shader on construction, so it is
+    // built here rather than inside the draw lambda.
+    val halo = remember(coreColor) {
+        Brush.radialGradient(
+            colors = listOf(coreColor.copy(alpha = 0.34f), Color.Transparent),
+            center = Offset(DESIGN_CENTRE, DESIGN_CENTRE),
+            radius = HALO_RADIUS
+        )
+    }
+
+    Canvas(
+        modifier = modifier.graphicsLayer {
+            // Rotation is a compositing transform, so the draw lambda below never re-runs because
+            // of it. This is the reason the animation is smooth.
+            rotationZ = spin
+        }
+    ) {
+        // Geometry is authored in a 100-unit square and scaled to fit, so the numbers below are
+        // fractions of the mark rather than pixels and nothing needs recomputing per size.
+        val side = minOf(size.width, size.height)
+        val scale = side / DESIGN_SIZE
         val centre = Offset(size.width / 2f, size.height / 2f)
-        // Everything is expressed as a fraction of the shorter edge so the mark stays circular in
-        // a non-square box.
-        val unit = minOf(size.width, size.height)
 
-        val rotation = Math.toRadians(spin.toDouble())
-        val cosR = cos(rotation).toFloat()
-        val sinR = sin(rotation).toFloat()
-
-        fun point(radius: Float, degrees: Double): Offset {
-            val angle = Math.toRadians(degrees)
-            val x = cos(angle).toFloat() * radius
-            val y = sin(angle).toFloat() * radius
-            return Offset(centre.x + x * cosR - y * sinR, centre.y + x * sinR + y * cosR)
+        translate(centre.x - DESIGN_CENTRE * scale, centre.y - DESIGN_CENTRE * scale) {
+            scale(scale, scale, pivot = Offset(DESIGN_CENTRE, DESIGN_CENTRE)) {
+                drawHalo(halo)
+                paths.longSpikes.forEach { drawPath(it, rayLightColour) }
+                paths.shortSpikes.forEach { drawPath(it, rayColor) }
+                drawCore(coreColor, coreHighlight)
+            }
         }
-
-        // Rays first, so the core sits on top of their inner ends.
-        repeat(RAY_COUNT) { index ->
-            val isLong = index % 2 == 0
-            val startRadius = unit * if (isLong) 0.17f else 0.18f
-            val endRadius = unit * if (isLong) 0.44f else 0.36f
-            val degrees = index * (360.0 / RAY_COUNT)
-            drawLine(
-                color = if (isLong) rayLightColour else rayColor,
-                start = point(startRadius, degrees),
-                end = point(endRadius, degrees),
-                strokeWidth = unit * if (isLong) 0.055f else 0.045f,
-                cap = StrokeCap.Round
-            )
-        }
-
-        val coreRadius = unit * 0.155f
-        drawCircle(color = coreColor.copy(alpha = 0.22f), radius = coreRadius * 1.45f, center = centre)
-        drawCircle(color = coreColor, radius = coreRadius, center = centre)
-        drawCircle(color = coreHighlight, radius = coreRadius * 0.6f, center = centre)
     }
 }
 
 /**
- * An orbit ring at [radiusFraction] of the mark's size, for the decorative layers behind it.
+ * The corona geometry, in a 100-unit square centred on [DESIGN_CENTRE].
+ *
+ * Built once and shared. [Path] is mutable, so handing the same instances to every frame is safe as
+ * long as nothing writes to them — and nothing does, because `drawPath` only reads.
+ */
+private class HeliosCoronaPaths(
+    val longSpikes: List<Path>,
+    val shortSpikes: List<Path>
+) {
+    companion object {
+        fun build(): HeliosCoronaPaths {
+            val long = ArrayList<Path>(SPIKE_COUNT / 3)
+            val short = ArrayList<Path>(SPIKE_COUNT - SPIKE_COUNT / 3)
+            for (index in 0 until SPIKE_COUNT) {
+                // Every third spike is long, which puts them at the cardinal points and gives the
+                // mark four-fold symmetry rather than the twelve-fold symmetry of a plain star.
+                val isLong = index % 3 == 0
+                val path = spike(
+                    degrees = index * (360.0 / SPIKE_COUNT),
+                    innerRadius = SPIKE_INNER_RADIUS,
+                    outerRadius = if (isLong) SPIKE_LONG_RADIUS else SPIKE_SHORT_RADIUS,
+                    halfWidth = if (isLong) SPIKE_LONG_HALF_WIDTH else SPIKE_SHORT_HALF_WIDTH
+                )
+                if (isLong) long.add(path) else short.add(path)
+            }
+            return HeliosCoronaPaths(long, short)
+        }
+    }
+}
+
+/**
+ * One tapered spike, pointing straight up from the centre and rotated into place.
+ *
+ * A triangle rather than a stroked line: a line cannot come to a point, and a round cap is exactly
+ * the blunt shape that made the old mark look machine-made. Base corners are placed by
+ * [halfWidth], so every spike has the same width at the core and differs only in how far it
+ * reaches — which is what makes length read as intensity.
+ */
+private fun spike(
+    degrees: Double,
+    innerRadius: Float,
+    outerRadius: Float,
+    halfWidth: Float
+): Path {
+    val radians = Math.toRadians(degrees)
+    val cosR = cos(radians).toFloat()
+    val sinR = sin(radians).toFloat()
+
+    // Author each spike pointing up (negative y), then rotate it about the centre. Each corner is
+    // computed once — this runs at build time, not per frame, but doing it twice is still silly.
+    fun corner(x: Float, y: Float): Offset =
+        Offset(DESIGN_CENTRE + x * cosR - y * sinR, DESIGN_CENTRE + x * sinR + y * cosR)
+
+    val left = corner(-halfWidth, -innerRadius)
+    val tip = corner(0f, -outerRadius)
+    val right = corner(halfWidth, -innerRadius)
+
+    return Path().apply {
+        moveTo(left.x, left.y)
+        lineTo(tip.x, tip.y)
+        lineTo(right.x, right.y)
+        close()
+    }
+}
+
+/**
+ * The soft halo behind the core.
+ *
+ * Takes a [Brush] that the caller already built, rather than building a gradient inside the draw
+ * pass: a `Brush` computes its shader on construction, and doing that every frame for a shape that
+ * never changes shape is exactly the kind of per-frame allocation that makes an animation stutter on
+ * a budget phone.
+ */
+private fun DrawScope.drawHalo(halo: Brush) {
+    drawCircle(
+        brush = halo,
+        radius = HALO_RADIUS,
+        center = Offset(DESIGN_CENTRE, DESIGN_CENTRE)
+    )
+}
+
+/** The core: a disc with a smaller, brighter highlight on top. */
+private fun DrawScope.drawCore(coreColor: Color, highlight: Color) {
+    drawCircle(
+        color = coreColor.copy(alpha = 0.9f),
+        radius = CORE_RADIUS,
+        center = Offset(DESIGN_CENTRE, DESIGN_CENTRE)
+    )
+    drawCircle(
+        color = highlight,
+        radius = CORE_RADIUS * 0.52f,
+        center = Offset(DESIGN_CENTRE - CORE_RADIUS * 0.12f, DESIGN_CENTRE - CORE_RADIUS * 0.12f)
+    )
+}
+
+/**
+ * A hairline ring at [radiusFraction] of the mark's size, for the decorative layers behind it.
  *
  * @param color ring colour; callers usually pass it at low alpha.
  * @param widthFraction stroke width as a fraction of the mark size.
@@ -106,14 +223,57 @@ fun HeliosOrbitRing(
         drawCircle(
             color = color,
             radius = unit * radiusFraction,
-            style = Stroke(width = unit * widthFraction)
+            style = Stroke(width = unit * widthFraction, cap = StrokeCap.Round)
         )
     }
 }
 
-/** The shared 16-second rotation used by the splash and the onboarding welcome page. */
+/**
+ * The ring that rides just outside the corona, turning the other way.
+ *
+ * Two rotations in opposite directions at different speeds read as depth rather than as a spinning
+ * sticker, and it costs one extra draw call. The rate is deliberately slow: 48s against the mark's
+ * 24s means they realign every 48s and never appear to lock.
+ */
 @Composable
-fun rememberSteadySpin(durationMillis: Int = 16_000): Float {
+fun HeliosCounterRing(
+    modifier: Modifier = Modifier,
+    color: Color = HeliosSun,
+    strokeWidth: Dp = 1.dp,
+    reverse: Boolean = true
+) {
+    val transition = rememberInfiniteTransition(label = "helios-counter-ring")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 48_000, easing = LinearEasing),
+            repeatMode = if (reverse) RepeatMode.Restart else RepeatMode.Reverse
+        ),
+        label = "counter-ring-angle"
+    )
+    Canvas(
+        modifier = modifier.graphicsLayer {
+            rotationZ = if (reverse) -angle else angle
+        }
+    ) {
+        val unit = minOf(size.width, size.height)
+        drawCircle(
+            color = color,
+            radius = unit * COUNTER_RING_FRACTION,
+            style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
+        )
+    }
+}
+
+/**
+ * The shared rotation used by the splash, the start page and onboarding.
+ *
+ * 24 seconds rather than the 16 the previous version used. At 16 the mark came round often enough
+ * that the eye read it as a spinner; 24 reads as something turning on its own.
+ */
+@Composable
+fun rememberSteadySpin(durationMillis: Int = 24_000): Float {
     val transition = rememberInfiniteTransition(label = "helios-sun-spin")
     val angle by transition.animateFloat(
         initialValue = 0f,
@@ -127,9 +287,18 @@ fun rememberSteadySpin(durationMillis: Int = 16_000): Float {
     return angle
 }
 
-private const val RAY_COUNT = 8
+private const val DESIGN_SIZE = 100f
+private const val DESIGN_CENTRE = 50f
+private const val SPIKE_COUNT = 12
+private const val SPIKE_INNER_RADIUS = 13f
+private const val SPIKE_LONG_RADIUS = 44f
+private const val SPIKE_SHORT_RADIUS = 33f
+private const val SPIKE_LONG_HALF_WIDTH = 3.1f
+private const val SPIKE_SHORT_HALF_WIDTH = 2.3f
+private const val CORE_RADIUS = 11.5f
+private const val HALO_RADIUS = 30f
+private const val COUNTER_RING_FRACTION = 0.5f
 
-// backgroundColor is a Long, so the literal needs the L suffix; `.toInt()` would not help.
 @Preview(showBackground = true, backgroundColor = 0xFF000000L)
 @Composable
 private fun HeliosSunMarkPreview() {

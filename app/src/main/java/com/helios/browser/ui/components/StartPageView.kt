@@ -47,12 +47,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.helios.browser.domain.model.DefaultShortcuts
 import com.helios.browser.domain.model.SearchEngine
+import com.helios.browser.engine.BlockListSource
 import com.helios.browser.ui.adaptive.HeliosLayout
+import com.helios.browser.ui.browser.BlockingEngineState
 import com.helios.browser.ui.browser.BrowserIntent
 import com.helios.browser.ui.browser.BrowserOverlay
 import com.helios.browser.ui.browser.BrowserState
 import com.helios.browser.ui.icons.HeliosGlyphs
 import com.helios.browser.ui.icons.HeliosIcons
+import com.helios.browser.ui.splash.HeliosCounterRing
 import com.helios.browser.ui.splash.HeliosOrbitRing
 import com.helios.browser.ui.splash.HeliosSunMark
 import com.helios.browser.ui.theme.HeliosBlue
@@ -114,8 +117,7 @@ fun StartPageView(
             BlockingSummary(
                 sessionBlockedCount = state.sessionBlockedCount,
                 blockingEnabled = state.settings.blockAdsAndTrackers,
-                engineReady = state.blockingEngine.isReady,
-                engineAvailable = state.blockingEngine.isAvailable,
+                engine = state.blockingEngine,
                 onClick = { onIntent(BrowserIntent.ShowOverlay(BrowserOverlay.Shields)) }
             )
         }
@@ -204,7 +206,14 @@ private fun HeliosWordmark() {
         Box(contentAlignment = Alignment.Center) {
             HeliosOrbitRing(
                 modifier = Modifier.size(104.dp),
-                color = HeliosSun.copy(alpha = 0.16f)
+                color = HeliosSun.copy(alpha = 0.14f)
+            )
+            // Turns against the mark, which is what makes the two read as separate planes rather
+            // than one spinning sticker.
+            HeliosCounterRing(
+                modifier = Modifier.size(92.dp),
+                color = HeliosSun.copy(alpha = 0.38f),
+                strokeWidth = 1.dp
             )
             HeliosSunMark(modifier = Modifier.size(76.dp))
         }
@@ -314,39 +323,46 @@ private fun StartPageSearchBox(
 }
 
 /**
- * What blocking has done this session, and whether it is on.
+ * What blocking has done this session, and what is actually doing it.
  *
- * The engine's readiness is reported alongside the count because the two can disagree: the count
- * can be non-zero while the engine is still compiling, and a user who sees "0 blocked" deserves to
- * know whether that means "nothing to block" or "not blocking yet".
+ * The engine's real state is spelled out rather than implied, because "Block ads and trackers: on"
+ * is not the same claim as "the Brave engine is loaded with EasyList". Those can disagree — while
+ * the lists are still compiling, or when the app was built without the native library — and a start
+ * page that just says "shields ready" in both cases is lying one way or the other.
+ *
+ * @param engine the live engine snapshot, so the provenance line cannot go stale.
  */
 @Composable
 private fun BlockingSummary(
     sessionBlockedCount: Int,
     blockingEnabled: Boolean,
-    engineReady: Boolean,
-    engineAvailable: Boolean,
+    engine: BlockingEngineState,
     onClick: () -> Unit
 ) {
     val headline = when {
         !blockingEnabled -> "Blocking is off"
-        !engineAvailable -> "Limited blocking"
-        !engineReady -> "Starting the blocker"
+        !engine.isAvailable -> "Limited blocking"
+        !engine.isReady -> "Starting the blocker"
         sessionBlockedCount > 0 -> "$sessionBlockedCount blocked this session"
         else -> "Nothing blocked yet"
     }
     val detail = when {
         !blockingEnabled ->
             "Ads and trackers are being allowed through. Tap to turn blocking back on."
-        !engineAvailable ->
+        !engine.isAvailable ->
             "This build has no native blocking library, so only the small built-in host list is " +
                 "in use. Tap for details."
-        !engineReady ->
-            "The filter lists are still compiling. The built-in host list is covering until then."
-        sessionBlockedCount > 0 ->
-            "EasyList and EasyPrivacy are loaded and intercepting requests. Tap to review."
-        else ->
-            "EasyList and EasyPrivacy are loaded. Requests are being checked on every page."
+        !engine.isReady ->
+            "Compiling the filter lists. The built-in host list is covering until then."
+        else -> "EasyList and EasyPrivacy are loaded and checking every request. Tap to review."
+    }
+    // Provenance, on its own line, only once there is something true to say about it.
+    val provenance = when {
+        !engine.isAvailable || !engine.isReady -> null
+        engine.source == BlockListSource.CACHE -> "Loaded from the local engine cache"
+        engine.source == BlockListSource.BUNDLED -> "Loaded from the copy bundled in the app"
+        engine.source == BlockListSource.REMOTE -> "Downloaded from easylist.to"
+        else -> null
     }
 
     GlassmorphicSurface(
@@ -366,7 +382,7 @@ private fun BlockingSummary(
                     .size(44.dp)
                     .clip(CircleShape)
                     .background(
-                        if (blockingEnabled && engineAvailable) {
+                        if (blockingEnabled && engine.isAvailable) {
                             HeliosShieldGreen.copy(alpha = 0.16f)
                         } else {
                             HeliosTextTertiary.copy(alpha = 0.14f)
@@ -377,7 +393,7 @@ private fun BlockingSummary(
                 Icon(
                     imageVector = HeliosIcons.Shield,
                     contentDescription = null,
-                    tint = if (blockingEnabled && engineAvailable) {
+                    tint = if (blockingEnabled && engine.isAvailable) {
                         HeliosShieldGreen
                     } else {
                         HeliosTextTertiary
@@ -400,6 +416,15 @@ private fun BlockingSummary(
                     lineHeight = 17.sp,
                     color = HeliosTextSecondary
                 )
+                if (provenance != null) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = provenance,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = HeliosTextTertiary
+                    )
+                }
             }
         }
     }

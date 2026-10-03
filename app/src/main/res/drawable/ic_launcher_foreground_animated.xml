@@ -1,13 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Animated variant of ic_launcher_foreground: the rays rotate once every 14 seconds.
+    Animated variant of ic_launcher_foreground: the corona turns once every 24 seconds.
 
-    A top-level <animated-rotate> applies to the whole drawable, which is why the static orbit
-    rings live in ic_launcher_background instead - rotating them would be invisible but pointless,
-    and keeping them out means the only moving part is the mark itself.
+    A top-level <animated-rotate> drives the "corona" group, which is why the static orbit rings
+    live in ic_launcher_background instead — rotating them would be invisible but pointless, and
+    keeping them out means the only moving part is the mark itself. The core stays still inside the
+    turning corona, which is what makes the motion read as the corona rotating around a fixed centre
+    rather than the whole sticker spinning.
+
+    24 seconds to match the Compose mark's rememberSteadySpin(). The previous 14 was fast enough to
+    read as a loading spinner rather than something turning on its own.
+
+    Geometry matches ui/splash/HeliosSunMark.kt and ic_launcher_foreground.xml exactly: twelve
+    tapered spikes on a 30 degree step, four of them long. If you change one, change all three.
 
     Support: AnimatedVectorDrawable as an adaptive-icon foreground works from API 26, but only
-    launchers that actually animate their icons (Pixel, AOSP, recent One UI) will show the motion.
+    launchers that actually animate their icons (Pixel, AOSP, recent One UI) show the motion.
     Everything else falls back to the still frame. minSdk is 26, so nothing degrades below that.
 -->
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -16,51 +24,64 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- Halo and core stay put; only the corona turns. -->
     <group android:name="halo">
         <path
-            android:pathData="M54,42 A12,12 0 1,1 53.99,42 Z"
+            android:pathData="M54,44.4 A9.6,9.6 0 1,1 53.99,44.4 Z"
             android:fillColor="#33FFC94D" />
     </group>
 
-    <group android:name="rays" android:pivotX="54" android:pivotY="54">
+    <group android:name="corona" android:pivotX="54" android:pivotY="54">
         <group android:pivotX="54" android:pivotY="54" android:rotation="0">
-            <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+            <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
         </group>
-        <group android:pivotX="54" android:pivotY="54" android:rotation="45">
-            <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        <group android:pivotX="54" android:pivotY="54" android:rotation="30">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+        </group>
+        <group android:pivotX="54" android:pivotY="54" android:rotation="60">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
         </group>
         <group android:pivotX="54" android:pivotY="54" android:rotation="90">
-            <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+            <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
         </group>
-        <group android:pivotX="54" android:pivotY="54" android:rotation="135">
-            <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        <group android:pivotX="54" android:pivotY="54" android:rotation="120">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+        </group>
+        <group android:pivotX="54" android:pivotY="54" android:rotation="150">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
         </group>
         <group android:pivotX="54" android:pivotY="54" android:rotation="180">
-            <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+            <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
         </group>
-        <group android:pivotX="54" android:pivotY="54" android:rotation="225">
-            <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        <group android:pivotX="54" android:pivotY="54" android:rotation="210">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+        </group>
+        <group android:pivotX="54" android:pivotY="54" android:rotation="240">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
         </group>
         <group android:pivotX="54" android:pivotY="54" android:rotation="270">
-            <path android:pathData="M51.6,42 L56.4,42 L55.2,29 L52.8,29 Z" android:fillColor="#FFD166" />
+            <path android:pathData="M51.67,44.25 L54.0,21.0 L56.33,44.25 Z" android:fillColor="#FFD166" />
         </group>
-        <group android:pivotX="54" android:pivotY="54" android:rotation="315">
-            <path android:pathData="M52.2,42 L55.8,42 L55,32 L53,32 Z" android:fillColor="#FFC94D" />
+        <group android:pivotX="54" android:pivotY="54" android:rotation="300">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
+        </group>
+        <group android:pivotX="54" android:pivotY="54" android:rotation="330">
+            <path android:pathData="M52.27,44.25 L54.0,29.25 L55.73,44.25 Z" android:fillColor="#FFC94D" />
         </group>
     </group>
 
     <group android:name="core">
         <path
-            android:pathData="M54,43 A11,11 0 1,1 53.99,43 Z"
+            android:pathData="M54,45.38 A8.62,8.62 0 1,1 53.99,45.38 Z"
             android:fillColor="#FFC94D" />
         <path
-            android:pathData="M54,47 A7,7 0 1,1 53.99,47 Z"
+            android:pathData="M53.34,44.72 A4.48,4.48 0 1,1 53.33,44.72 Z"
             android:fillColor="#FFF3D6" />
     </group>
 
     <animated-rotate
         android:name="spin"
-        android:duration="14000"
+        android:duration="24000"
         android:fromDegrees="0"
         android:toDegrees="360"
         android:pivotX="54"
