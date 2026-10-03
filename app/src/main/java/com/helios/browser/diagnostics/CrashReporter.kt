@@ -56,8 +56,9 @@ object CrashReporter {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
 
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            // A throwable that escapes while we are recording must not recurse.
-            if (!recording.get()) {
+            // Compared with `!= true` rather than negated, because ThreadLocal.withInitial hands
+            // back a platform type and `!recording.get()` does not typecheck on a Boolean?.
+            if (recording.get() != true) {
                 recording.set(true)
                 runCatching { record(directory, thread, error) }
                     .onFailure { Log.e(TAG, "Could not record the crash", it) }

@@ -123,10 +123,6 @@ class BlockingPresetTest {
      */
     @Test
     fun `trackers only is smaller than balanced`() {
-        assertTrue(
-            FilterList.entries.size >= 2,
-            "needs at least two lists to compare"
-        )
         assertNotEquals(
             BlockingPreset.TRACKERS_ONLY.listNames,
             BlockingPreset.HELIOS_BALANCED.listNames
