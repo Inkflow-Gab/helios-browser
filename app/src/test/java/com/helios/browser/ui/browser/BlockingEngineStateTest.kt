@@ -81,14 +81,16 @@ class BlockingEngineStateTest {
      * Guard against the two types drifting apart: adding a field to one and not the other must fail
      * here, not silently in production.
      *
-     * Synthetic fields are excluded because `@Immutable` makes the Compose compiler add a `$stable`
-     * field to the UI type that the engine type has no reason to have. Comparing raw reflection
-     * output would report a difference that does not exist.
+     * Compiler-generated fields are skipped by name. `@Immutable` makes the Compose compiler add a
+     * `$stable` field to the UI type that the engine type has no reason to have, and it is not
+     * marked synthetic, so filtering on `isSynthetic` does not catch it. A `$`-prefixed name is the
+     * convention every Kotlin compiler here uses for generated members, and a real property can
+     * never have one.
      */
     @Test
     fun `the two types have the same fields`() {
         fun declared(type: Class<*>) = type.declaredFields
-            .filterNot { it.isSynthetic }
+            .filterNot { it.isSynthetic || it.name.startsWith("$") }
             .map { it.name }
             .toSet()
 
@@ -96,6 +98,19 @@ class BlockingEngineStateTest {
             declared(BlockingEngineSnapshot::class.java),
             declared(BlockingEngineState::class.java)
         )
+    }
+
+    /**
+     * The filter must not be quietly excluding a real field, which would make the check above pass
+     * no matter what. `$stable` is the only one it should ever drop.
+     */
+    @Test
+    fun `the field filter only drops the compose stability marker`() {
+        val dropped = BlockingEngineState::class.java.declaredFields
+            .filter { it.isSynthetic || it.name.startsWith("$") }
+            .map { it.name }
+            .toSet()
+        assertEquals(setOf("\$stable"), dropped)
     }
 
     @Test
