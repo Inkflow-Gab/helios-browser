@@ -122,9 +122,10 @@ fun AddressBar(
                     .height(2.dp)
                     .clip(RoundedCornerShape(1.dp)),
                 color = HeliosBlue,
-                trackColor = Color.Transparent,
-                gapSize = 0.dp,
-                drawStopIndicator = {}
+                trackColor = Color.Transparent
+                // No gapSize / drawStopIndicator: those were added in Material3 1.3, and this module
+                // is on the 2024.06.00 BOM (1.2.1), whose overload takes only progress, color,
+                // trackColor and strokeCap.
             )
         }
 

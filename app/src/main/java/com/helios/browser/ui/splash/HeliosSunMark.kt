@@ -129,7 +129,8 @@ fun rememberSteadySpin(durationMillis: Int = 16_000): Float {
 
 private const val RAY_COUNT = 8
 
-@Preview(showBackground = true, backgroundColor = 0xFF000000.toInt())
+// backgroundColor is a Long, so the literal needs the L suffix; `.toInt()` would not help.
+@Preview(showBackground = true, backgroundColor = 0xFF000000L)
 @Composable
 private fun HeliosSunMarkPreview() {
     HeliosSunMark(modifier = Modifier.size(240.dp))

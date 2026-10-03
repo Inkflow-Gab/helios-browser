@@ -90,8 +90,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // Window size classes drive the adaptive layout (columns, nav rail, omnibox placement).
-    implementation("androidx.compose.material3:material3-window-size-class:1.2.1")
+    // No material3-window-size-class: the adaptive layout reads LocalConfiguration, which already
+    // reports window bounds. See ui/adaptive/HeliosLayoutCompose.kt for why.
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")
 

@@ -30,8 +30,7 @@ class HeliosWebViewClient(
     private val onPageFinished: (url: String, title: String?, canGoBack: Boolean, canGoForward: Boolean) -> Unit,
     private val onRequestBlocked: () -> Unit,
     private val onExternalNavigation: (url: String) -> Unit,
-    private val onNavigationStarted: (url: String) -> Unit,
-    private val onDownload: (DownloadRequest) -> Unit
+    private val onNavigationStarted: (url: String) -> Unit
 ) : WebViewClient() {
 
     /**
@@ -146,22 +145,12 @@ class HeliosWebViewClient(
         )
     }
 
-    override fun onDownloadRequest(view: WebView?, url: String?, userAgent: String?,
-                                  contentDisposition: String?, mimetype: String?,
-                                  contentLength: Long) {
-        super.onDownloadRequest(view, url, userAgent, contentDisposition, mimetype, contentLength)
-        val target = url ?: return
-        if (!UrlNormalizer.isWebUrl(target)) return
-        onDownload(
-            DownloadRequest(
-                url = target,
-                userAgent = userAgent,
-                contentDisposition = contentDisposition,
-                mimeType = mimetype,
-                contentLength = contentLength
-            )
-        )
-    }
+    // Downloads deliberately have no WebViewClient callback here, and that is the only correct
+    // design. The route this file originally took — overriding `onDownloadRequest` — does not
+    // compile; no such method exists on WebViewClient. The supported API is
+    // `WebView.setDownloadListener`, which `WebViewFactory` registers and which also suppresses the
+    // WebView's default "this file cannot be displayed" page. That is why this class no longer takes
+    // an `onDownload` callback at all: keeping one would be a second, unreachable path.
 
     private fun applyCosmeticFilters(view: WebView?, url: String?) {
         val target = view ?: return

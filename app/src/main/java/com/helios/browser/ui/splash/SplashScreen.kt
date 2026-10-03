@@ -159,7 +159,8 @@ fun SplashScreen(
 private fun stagger(progress: Float, startAt: Float): Float =
     ((progress - startAt) / (1f - startAt)).coerceIn(0f, 1f)
 
-@Preview(widthDp = 360, heightDp = 720, showBackground = true, backgroundColor = 0xFF000000.toInt())
+// backgroundColor is a Long, so the literal needs the L suffix.
+@Preview(widthDp = 360, heightDp = 720, showBackground = true, backgroundColor = 0xFF000000L)
 @Composable
 private fun SplashScreenPreview() {
     HeliosTheme {

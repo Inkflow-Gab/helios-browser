@@ -1,8 +1,6 @@
 package com.helios.browser
 
 import android.app.Application
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
 import com.helios.browser.engine.BlockListRepository
 import com.helios.browser.engine.NativeAdBlock
 import dagger.hilt.android.HiltAndroidApp
@@ -29,16 +27,10 @@ class HeliosApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-
-        // Turns on the Chromium Safe Browsing hash database. Must happen once per process and needs
-        // WebView to already be loaded, which `WebViewCompat.isFeatureSupported` guarantees here.
-        // The in-app "Safe Browsing" toggle controls whether hits are intercepted and shown.
-        runCatching {
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
-                WebViewCompat.enableSafeBrowsing(this, true)
-            }
-        }
-
+        // Safe Browsing is *not* enabled here. There is no process-wide switch for it: the
+        // androidx.webkit API is `WebSettingsCompat.setSafeBrowsingEnabled(WebSettings, Boolean)`,
+        // which is per-WebView, so `WebViewFactory` applies it when it builds a tab and honours the
+        // user's Shields setting. See the note there.
         loadFilterLists()
     }
 

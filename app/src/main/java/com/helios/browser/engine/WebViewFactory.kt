@@ -7,6 +7,8 @@ import android.webkit.CookieManager
 import android.webkit.DownloadListener
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import com.helios.browser.domain.model.BlockingConfig
 import com.helios.browser.ui.browser.BrowserIntent
 
@@ -57,6 +59,7 @@ object WebViewFactory {
 
         applyDesktopMode(this, isDesktopMode)
         applyIncognito(this, isIncognito)
+        applySafeBrowsing(this, blockingConfigProvider().safeBrowsingEnabled)
 
         webViewClient = HeliosWebViewClient(
             configProvider = blockingConfigProvider,
@@ -70,8 +73,7 @@ object WebViewFactory {
             onExternalNavigation = { url -> onIntent(BrowserIntent.ExternalNavigate(url)) },
             // HTTPS upgrades and tracking-parameter rewrites arrive already-resolved; re-running
             // them through Navigate would be a no-op, so the URL is applied verbatim.
-            onNavigationStarted = { url -> onIntent(BrowserIntent.Navigate(url)) },
-            onDownload = { request -> downloadListener(request) }
+            onNavigationStarted = { url -> onIntent(BrowserIntent.Navigate(url)) }
         )
 
         webChromeClient = HeliosChromeClient(
@@ -128,5 +130,32 @@ object WebViewFactory {
     /** Re-applies [applyIncognito] without recreating the WebView. */
     fun syncPrivacy(webView: WebView, isIncognito: Boolean) {
         applyIncognito(webView, isIncognito)
+    }
+
+    /**
+     * Turns Chromium's Safe Browsing hash database on or off for this WebView.
+     *
+     * Applied here rather than in `Application.onCreate` because there is no process-wide switch:
+     * the only androidx.webkit entry point is `WebSettingsCompat.setSafeBrowsingEnabled`, which takes
+     * a `WebSettings`, so it is inherently per-WebView. (There is no
+     * `WebViewCompat.enableSafeBrowsing` — it does not exist, and an earlier revision of this file
+     * called it and did not compile.)
+     *
+     * Enabling it populates and holds the hash database, which costs memory and a download, so it
+     * follows the user's Shields setting instead of being unconditional.
+     *
+     * Read at construction only. A tab whose user toggles the setting afterwards keeps the state it
+     * was built with; the alternative is rebuilding every live WebView, which would discard page
+     * state. Toggling applies to tabs opened next.
+     *
+     * Wrapped because the feature is absent on older WebView providers, where the call is a no-op
+     * rather than an error.
+     */
+    private fun applySafeBrowsing(webView: WebView, enabled: Boolean) {
+        runCatching {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
+                WebSettingsCompat.setSafeBrowsingEnabled(webView.settings, enabled)
+            }
+        }
     }
 }

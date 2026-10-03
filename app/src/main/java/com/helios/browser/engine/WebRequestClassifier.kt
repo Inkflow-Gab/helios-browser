@@ -88,13 +88,27 @@ object WebRequestClassifier {
         }
     }
 
-    /** Android wrapper. Keeps [classify] free of `WebResourceRequest` so it stays unit testable. */
-    fun fromRequest(request: WebResourceRequest): String = classify(
-        url = request.url.toString(),
-        accept = request.getRequestHeader("Accept"),
-        isForMainFrame = request.isForMainFrame,
-        hasXRequestedWith = request.getRequestHeader("X-Requested-With") != null
-    )
+    /**
+     * Android wrapper. Keeps [classify] free of `WebResourceRequest` so it stays unit testable.
+     *
+     * `WebResourceRequest` exposes `getRequestHeaders(): Map<String, String>` and nothing else for
+     * headers — there is no single-header accessor, so both lookups go through the map. Header names
+     * are matched case-insensitively here because a browser is free to send `accept` or `accept-*`,
+     * and the map's keys are whatever the page asked for.
+     */
+    fun fromRequest(request: WebResourceRequest): String {
+        val headers = request.requestHeaders
+        return classify(
+            url = request.url.toString(),
+            accept = headers.header("accept"),
+            isForMainFrame = request.isForMainFrame,
+            hasXRequestedWith = headers.header("x-requested-with") != null
+        )
+    }
+
+    /** Case-insensitive single-header lookup; null when absent or when the value is blank. */
+    private fun Map<String, String>.header(name: String): String? =
+        entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.takeIf { it.isNotBlank() }
 
     /**
      * The lowercased extension after the final dot, or an empty string.

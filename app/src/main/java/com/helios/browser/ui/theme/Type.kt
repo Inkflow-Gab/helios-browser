@@ -1,3 +1,7 @@
+// `FontVariation` is `@ExperimentalTextApi` in this Compose version, so the whole file opts in.
+// File annotations must precede the package declaration, which is why this is on line 1.
+@file:OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+
 package com.helios.browser.ui.theme
 
 import androidx.compose.material3.Typography
@@ -17,6 +21,10 @@ import com.helios.browser.R
  * the APK size versus static weights, and it means a new weight is a new line here instead of a new
  * binary. The cost is that each weight needs explicit `variationSettings`, because Compose will not
  * interpolate along the axis on its own — see the helpers below.
+ *
+ * `FontVariation` is `@ExperimentalTextApi` in this Compose version, hence the `@file:OptIn` at the
+ * very top of this file. It is file-wide rather than per-function because every helper here needs
+ * it and annotating each one separately would be noise.
  *
  * Do not replace these with downloadable fonts (Google Fonts provider): that needs network on first
  * run and Play Services, both of which this app is trying not to depend on.
@@ -77,12 +85,18 @@ private val TrimBottomOnly = LineHeightStyle(
     trim = LineHeightStyle.Trim.LastLineBottom
 )
 
+/**
+ * Builds one style.
+ *
+ * `tracking` is a `Float`, not a `Double`: only `Float.sp` and `Int.sp` exist as extensions, so a
+ * Double parameter would have to be converted anyway and `Double.sp` is not a thing that compiles.
+ */
 private fun style(
     family: FontFamily,
     weight: FontWeight,
     size: Int,
     lineHeight: Int,
-    tracking: Double = 0.0
+    tracking: Float = 0f
 ) = TextStyle(
     fontFamily = family,
     fontWeight = weight,
@@ -99,23 +113,23 @@ private fun style(
  * from body copy; everything functional is Inter.
  */
 val Typography = Typography(
-    displayLarge = style(DisplayFamily, FontWeight.Bold, 44, 50, (-1.5)),
-    displayMedium = style(DisplayFamily, FontWeight.Bold, 34, 40, (-1.0)),
-    displaySmall = style(DisplayFamily, FontWeight.SemiBold, 28, 34, (-0.6)),
+    displayLarge = style(DisplayFamily, FontWeight.Bold, 44, 50, -1.5f),
+    displayMedium = style(DisplayFamily, FontWeight.Bold, 34, 40, -1.0f),
+    displaySmall = style(DisplayFamily, FontWeight.SemiBold, 28, 34, -0.6f),
 
-    headlineLarge = style(DisplayFamily, FontWeight.SemiBold, 26, 32, (-0.5)),
-    headlineMedium = style(DisplayFamily, FontWeight.SemiBold, 24, 30, (-0.5)),
-    headlineSmall = style(InterFamily, FontWeight.Bold, 20, 26, (-0.3)),
+    headlineLarge = style(DisplayFamily, FontWeight.SemiBold, 26, 32, -0.5f),
+    headlineMedium = style(DisplayFamily, FontWeight.SemiBold, 24, 30, -0.5f),
+    headlineSmall = style(InterFamily, FontWeight.Bold, 20, 26, -0.3f),
 
-    titleLarge = style(InterFamily, FontWeight.SemiBold, 19, 25, (-0.3)),
-    titleMedium = style(InterFamily, FontWeight.Medium, 16, 22, (-0.2)),
-    titleSmall = style(InterFamily, FontWeight.SemiBold, 14, 19, (-0.1)),
+    titleLarge = style(InterFamily, FontWeight.SemiBold, 19, 25, -0.3f),
+    titleMedium = style(InterFamily, FontWeight.Medium, 16, 22, -0.2f),
+    titleSmall = style(InterFamily, FontWeight.SemiBold, 14, 19, -0.1f),
 
-    bodyLarge = style(InterFamily, FontWeight.Normal, 15, 21, 0.0),
-    bodyMedium = style(InterFamily, FontWeight.Normal, 13, 18, 0.0),
-    bodySmall = style(InterFamily, FontWeight.Normal, 12, 16, 0.1),
+    bodyLarge = style(InterFamily, FontWeight.Normal, 15, 21, 0f),
+    bodyMedium = style(InterFamily, FontWeight.Normal, 13, 18, 0f),
+    bodySmall = style(InterFamily, FontWeight.Normal, 12, 16, 0.1f),
 
-    labelLarge = style(InterFamily, FontWeight.SemiBold, 14, 18, 0.1),
-    labelMedium = style(InterFamily, FontWeight.Medium, 12, 16, 0.3),
-    labelSmall = style(InterFamily, FontWeight.SemiBold, 11, 14, 0.5)
+    labelLarge = style(InterFamily, FontWeight.SemiBold, 14, 18, 0.1f),
+    labelMedium = style(InterFamily, FontWeight.Medium, 12, 16, 0.3f),
+    labelSmall = style(InterFamily, FontWeight.SemiBold, 11, 14, 0.5f)
 )
