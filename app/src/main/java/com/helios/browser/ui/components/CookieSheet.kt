@@ -305,14 +305,15 @@ fun CookieSheet(
                         tools.addSingle(entry, pageUrl, isPrivate) { ok ->
                             scope.launch {
                                 busy = false
-                                report = if (ok) {
+                                if (ok) {
+                                    // Straight to the site. Nothing to read here, and onApplied
+                                    // closes the sheet, so no report either.
                                     cookieName = ""
                                     cookieValue = ""
-                                    // Straight to the site. There is nothing to read here, so
-                                    // holding the sheet open would only be in the way.
                                     onApplied("Added ${entry.name} to $host")
                                 } else {
-                                    Report(
+                                    // This one keeps the sheet open, because the user has to see why.
+                                    report = Report(
                                         title = "Could not set that cookie",
                                         detail = "The name or value contains something a cookie " +
                                             "header cannot carry, or the store refused the write.",
